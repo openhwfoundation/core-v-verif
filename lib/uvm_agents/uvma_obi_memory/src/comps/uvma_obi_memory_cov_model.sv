@@ -244,8 +244,8 @@ endfunction : sample_cntxt
 function void uvma_obi_memory_cov_model_c::sample_mon_trn(uvma_obi_memory_mon_trn_c trn);
    
    obi_cg.sample(trn);
-   if (cfg.write_enabled) wr_delay_cg.sample(trn);   
-   if (cfg.read_enabled)  rd_delay_cg.sample(trn);   
+   if (cfg.write_enabled && (trn.access_type == UVMA_OBI_MEMORY_ACCESS_WRITE)) wr_delay_cg.sample(trn);
+   if (cfg.read_enabled  && (trn.access_type == UVMA_OBI_MEMORY_ACCESS_READ))  rd_delay_cg.sample(trn);
    
 endfunction : sample_mon_trn
 
