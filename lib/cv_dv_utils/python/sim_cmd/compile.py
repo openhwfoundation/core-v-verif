@@ -26,6 +26,9 @@ parser = argparse.ArgumentParser(description='compile options')
 parser.add_argument('--yaml'     ,dest='yaml_file', type=str, help='Top YAML with compile and simulation options')
 parser.add_argument('--outdir'   ,dest='outdir',    type=str, help='Logs are directed to outdir: default output')
 parser.add_argument('--cover'    ,dest='cover',     type=int, help='1: instrument for coverage (adds +cover to vopt), 0: no coverage, default 0')
+parser.add_argument('--cover_types'  , dest='cover_types',   type=str, help='coverage types for vopt +cover=<types> (e.g. "bcfs" = branch/condition/statement/FSM); only meaningful with --cover 1, default: bare +cover (all types)')
+parser.add_argument('--cover_instance', dest='cover_instance', type=str, help='instance path to scope coverage instrumentation, appended as +cover=<types>+<instance>.; only meaningful with --cover 1, default: whole design')
+parser.add_argument('--define'   ,dest='defines',    action='append', help='Additional +define+<MACRO> to pass to the compiler, repeatable')
 args = parser.parse_args()
 
 cover = args.cover if args.cover is not None else 0
@@ -67,6 +70,10 @@ else:
       print("[INFO] Eliminating existing worklib {}...".format(work_lib))
       os.system("rm -r {}".format(work_lib))
 
+    #create a fresh work library; required for non-default library names, and
+    #avoids vopt silently reusing/misreading a stale library directory
+    os.system("vlib {}".format(work_lib))
+
     if 'filelist' in comp:
       filelist  = comp['filelist']
       #Generating the filelist with Bender dependencies
@@ -84,12 +91,22 @@ else:
     else:
       comp_opt = ""
 
+    if args.defines:
+      comp_opt += "".join(f" +define+{d}" for d in args.defines)
+
     if 'elab_option' in comp:
        elab_opt = comp['elab_option']
     else:
        elab_opt = ""
 
-    cover_opt = "+cover" if cover == 1 else ""
+    if cover == 1:
+      cover_opt = f"+cover={args.cover_types}" if args.cover_types else "+cover"
+      if args.cover_instance:
+        cover_opt += f"+{args.cover_instance}."
+    else:
+      cover_opt = ""
+      if args.cover_types or args.cover_instance:
+        print("[INFO]: --cover_types/--cover_instance ignored because --cover is not set to 1")
 
     if 'top_entity' in comp:
       top  = comp['top_entity']
