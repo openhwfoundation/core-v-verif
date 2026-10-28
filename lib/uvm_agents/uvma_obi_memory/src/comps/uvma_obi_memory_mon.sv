@@ -175,6 +175,7 @@ task uvma_obi_memory_mon_c::observe_reset();
    forever begin
       wait (cntxt.vif.reset_n === 0);
       cntxt.reset_state = UVMA_OBI_MEMORY_RESET_STATE_IN_RESET;
+      cntxt.reset();
       `uvm_info("OBI_MEMORY_MON", $sformatf("RESET_STATE_IN_RESET"), UVM_NONE)
       wait (cntxt.vif.reset_n === 1);
       cntxt.reset_state = UVMA_OBI_MEMORY_RESET_STATE_POST_RESET;
@@ -240,14 +241,24 @@ task uvma_obi_memory_mon_c::mon_chan_r_post_reset();
    wait (cntxt.mon_outstanding_reads_q.size());
    trn = cntxt.mon_outstanding_reads_q.pop_front();
 
-   mon_chan_r_trn(trn);
-   trn.cfg = cfg;
-   `uvm_info("OBI_MEMORY_MON", $sformatf("monitored transaction on channel R:\n%s", trn.sprint()), UVM_HIGH)
-   process_r_trn(trn);
-   `uvm_info("OBI_MEMORY_MON", $sformatf("monitored transaction on channel R after process_r_trn():\n%s", trn.sprint()), UVM_HIGH)
-   ap.write(trn);
-   `uvml_hrtbt()
-   @(passive_mp.mon_cb);
+   fork
+      begin
+         fork
+            begin
+               mon_chan_r_trn(trn);
+               trn.cfg = cfg;
+               `uvm_info("OBI_MEMORY_MON", $sformatf("monitored transaction on channel R:\n%s", trn.sprint()), UVM_HIGH)
+               process_r_trn(trn);
+               `uvm_info("OBI_MEMORY_MON", $sformatf("monitored transaction on channel R after process_r_trn():\n%s", trn.sprint()), UVM_HIGH)
+               ap.write(trn);
+               `uvml_hrtbt()
+               @(passive_mp.mon_cb);
+            end
+            @(cntxt.reset_state != UVMA_OBI_MEMORY_RESET_STATE_POST_RESET);
+         join_any
+         disable fork;
+      end
+   join
 
 endtask : mon_chan_r_post_reset
 
