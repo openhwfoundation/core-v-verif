@@ -40,7 +40,7 @@ public:
   void take_interrupt(reg_t pending_interrupts);
   virtual void enter_debug_mode(uint8_t cause) override;
 
-  void reset();
+  void reset() override;
 
   bool any_custom_extensions() const override {
     if ((this->get_params()[base + "override_custom_extensions"]).a_bool)

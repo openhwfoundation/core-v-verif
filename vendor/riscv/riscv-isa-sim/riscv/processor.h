@@ -195,7 +195,7 @@ public:
   void set_histogram(bool value);
   void enable_log_commits();
   bool get_log_commits_enabled() const { return log_commits_enabled; }
-  void reset();
+  virtual void reset();
   void step(size_t n); // run for n cycles
   virtual void put_csr(int which, reg_t val);
   uint32_t get_id() const { return id; }

@@ -36,6 +36,20 @@ openhw_srcs = \
 	cva6/cvxif.cc \
 	cva6/cv32a60x.cc \
 
+# The generic unit-test support expects a legacy libutst that is not part of
+# this tree.  Build the CV32E20 reset regression as a normal (non-installed)
+# program and add its output to the top-level `make check` inputs instead.
+ifeq ($(OPENHW_CORE),cv32e20)
+openhw_prog_srcs = cv32e20/reset_test.cc
+openhw_reset_test_out = cv32e20/reset_test.out
+test_outs += $(openhw_reset_test_out)
+
+# Keep the test process's exit status (the generic %.out rule pipes through
+# tee, which otherwise hides failures before check-cpp examines the log).
+$(openhw_reset_test_out): cv32e20/reset_test
+	./$< > $@ 2>&1; result=$$?; cat $@; exit $$result
+endif
+
 openhw_install_hdrs = \
 	common/Simulation.h \
 	common/csrs_ext.h \

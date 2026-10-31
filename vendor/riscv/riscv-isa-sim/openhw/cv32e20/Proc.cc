@@ -503,11 +503,6 @@ Processor::Processor(
     }
   }
 
-  this->taken_trap = false;
-  this->taken_debug = false;
-  this->nmi_inject = false;
-
-
   ((cfg_t *)cfg)->misaligned =
       (this->params[base + "misaligned"]).a_bool;
 
@@ -559,51 +554,6 @@ Processor::Processor(
 
   std::cerr << "### [SPIKE] Calling Processor::reset() on hart " << std::dec << this->get_id() << "..." << std::endl;
   this->reset();
-
-  // CVE2's tdata1.type is hardwired (not writable) -- per the Debug spec
-  // (riscv-debug-v1.0.0-stable.pdf §5.5.5), tinfo "is optional if ... type
-  // is not writable", and CVE2 does not implement it, so we expect an illegal
-  // instruction here.
-  get_state()->csrmap.erase(CSR_TINFO);
-
-  // Spike registers "mcontext" (0x7A8) as a proxy alias for hcontext (Debug
-  // spec §5.5.9) but never registers mscontext (0x7AA), even though §5.5.10
-  // says it's an alias for scontext the same way -- a plain Spike omission,
-  // not a CVE2 carve-out. CVE2 does implement this address.
-  get_state()->csrmap[CSR_MSCONTEXT] = std::make_shared<proxy_csr_t>(
-      this, CSR_MSCONTEXT, get_state()->csrmap[CSR_SCONTEXT]);
-
-  // CVE2-custom "secureseed" CSR (0x7C1)is  not standard RISC-V, so Spike has
-  // no knowledge of it and throws an illegal-instruction trap. Not an RTL defect
-  // (no RVpriv existence rule applies, same category as tinfo above).
-  get_state()->csrmap[0x7C1] = std::make_shared<const_csr_t>(this, 0x7C1, 0);
-
-  // Give mhpmcounter5..10 a real backing register (see Proc.h) so
-  // Processor::step() can increment them on qualifying retirements.
-  {
-    auto install_hpm_counter = [this](reg_t addr, reg_t addrh,
-                                       std::shared_ptr<basic_csr_t> &slot) {
-      slot = std::make_shared<basic_csr_t>(this, addr, 0);
-      if (this->get_xlen() == 32) {
-        get_state()->csrmap[addr]  = std::make_shared<rv32_low_csr_t>(this, addr, slot);
-        get_state()->csrmap[addrh] = std::make_shared<rv32_high_csr_t>(this, addrh, slot);
-      } else {
-        get_state()->csrmap[addr] = slot;
-      }
-    };
-    install_hpm_counter(CSR_MHPMCOUNTER5,  CSR_MHPMCOUNTER5H,  this->hpm_loads);
-    install_hpm_counter(CSR_MHPMCOUNTER6,  CSR_MHPMCOUNTER6H,  this->hpm_stores);
-    install_hpm_counter(CSR_MHPMCOUNTER7,  CSR_MHPMCOUNTER7H,  this->hpm_jumps);
-    install_hpm_counter(CSR_MHPMCOUNTER8,  CSR_MHPMCOUNTER8H,  this->hpm_branches);
-    install_hpm_counter(CSR_MHPMCOUNTER9,  CSR_MHPMCOUNTER9H,  this->hpm_branches_taken);
-    install_hpm_counter(CSR_MHPMCOUNTER10, CSR_MHPMCOUNTER10H, this->hpm_instret_c);
-
-    // Real backing register for mcountinhibit (base Spike hardwires it
-    // read-only-0) so the shadow counters above honor software's inhibit
-    // bits, matching CVE2's documented gating (performance_counters.rst).
-    get_state()->csrmap[CSR_MCOUNTINHIBIT] =
-        std::make_shared<basic_csr_t>(this, CSR_MCOUNTINHIBIT, 0);
-  }
 }
 
 void Processor::take_trap(trap_t &t, reg_t epc) {
@@ -788,6 +738,14 @@ void Processor::reset()
 {
     processor_t::reset();
 
+    this->taken_trap = false;
+    this->taken_debug = false;
+    this->which_trap = 0;
+    this->which_debug = 0;
+    this->nmi_inject = false;
+    this->cve2_trigger_execute = false;
+    this->last_log_reg_write.clear();
+
     uint64_t new_pc = (this->params[base + "boot_addr"]).a_uint64_t;
     this->state.pc = new_pc;
 
@@ -888,6 +846,53 @@ void Processor::reset()
             p_csr->set_param_implemented(0x0);
         }
     }
+
+    // CVE2's tdata1.type is hardwired (not writable) -- per the Debug spec
+    // (riscv-debug-v1.0.0-stable.pdf §5.5.5), tinfo "is optional if ... type
+    // is not writable", and CVE2 does not implement it, so we expect an illegal
+    // instruction here.
+    get_state()->csrmap.erase(CSR_TINFO);
+
+    // Spike registers "mcontext" (0x7A8) as a proxy alias for hcontext (Debug
+    // spec §5.5.9) but never registers mscontext (0x7AA), even though §5.5.10
+    // says it's an alias for scontext the same way -- a plain Spike omission,
+    // not a CVE2 carve-out. CVE2 does implement this address.
+    get_state()->csrmap[CSR_MSCONTEXT] = std::make_shared<proxy_csr_t>(
+        this, CSR_MSCONTEXT, get_state()->csrmap[CSR_SCONTEXT]);
+
+    // CVE2-custom "secureseed" CSR (0x7C1) is not standard RISC-V, so Spike has
+    // no knowledge of it and throws an illegal-instruction trap. Not an RTL defect
+    // (no RVpriv existence rule applies, same category as tinfo above).
+    get_state()->csrmap[0x7C1] = std::make_shared<const_csr_t>(this, 0x7C1, 0);
+
+    // Give mhpmcounter5..10 a real backing register (see Proc.h) so
+    // Processor::step() can increment them on qualifying retirements.
+    auto install_hpm_counter = [this](reg_t addr, reg_t addrh,
+                                      std::shared_ptr<basic_csr_t> &slot) {
+      slot = std::make_shared<basic_csr_t>(this, addr, 0);
+      if (this->get_xlen() == 32) {
+        get_state()->csrmap[addr] =
+            std::make_shared<rv32_low_csr_t>(this, addr, slot);
+        get_state()->csrmap[addrh] =
+            std::make_shared<rv32_high_csr_t>(this, addrh, slot);
+      } else {
+        get_state()->csrmap[addr] = slot;
+      }
+    };
+    install_hpm_counter(CSR_MHPMCOUNTER5, CSR_MHPMCOUNTER5H, this->hpm_loads);
+    install_hpm_counter(CSR_MHPMCOUNTER6, CSR_MHPMCOUNTER6H, this->hpm_stores);
+    install_hpm_counter(CSR_MHPMCOUNTER7, CSR_MHPMCOUNTER7H, this->hpm_jumps);
+    install_hpm_counter(CSR_MHPMCOUNTER8, CSR_MHPMCOUNTER8H, this->hpm_branches);
+    install_hpm_counter(CSR_MHPMCOUNTER9, CSR_MHPMCOUNTER9H,
+                        this->hpm_branches_taken);
+    install_hpm_counter(CSR_MHPMCOUNTER10, CSR_MHPMCOUNTER10H,
+                        this->hpm_instret_c);
+
+    // Real backing register for mcountinhibit (base Spike hardwires it
+    // read-only-0) so the shadow counters above honor software's inhibit
+    // bits, matching CVE2's documented gating (performance_counters.rst).
+    get_state()->csrmap[CSR_MCOUNTINHIBIT] =
+        std::make_shared<basic_csr_t>(this, CSR_MCOUNTINHIBIT, 0);
 }
 
 void Processor::take_pending_interrupt() {

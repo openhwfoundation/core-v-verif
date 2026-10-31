@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
+#include <stdexcept>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <vector>
@@ -210,6 +211,16 @@ extern "C" void spike_step_struct(st_rvfi &reference, st_rvfi &spike) {
   vreference.push_back(reference);
   vspike = sim->step(1, vreference);
   spike = vspike[0];
+}
+
+// Keep Spike in sync with an RTL hart reset during tandem simulation.
+extern "C" void spike_reset_hart(uint64_t hart_id) {
+  if (!sim)
+    throw std::runtime_error("spike_reset_hart called before spike_create");
+  auto* proc = sim->get_core_by_id(hart_id);
+  if (!proc)
+    throw std::runtime_error("spike_reset_hart called with an unknown hart ID");
+  proc->reset();
 }
 
 extern "C" void spike_step_svLogic(svLogicVecVal* reference,
