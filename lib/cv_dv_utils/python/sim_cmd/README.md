@@ -38,6 +38,16 @@ python3 compile.py --yaml yaml_file.yaml [--outdir output_dir] [--cover 0/1]
 | `--cover` | `1`: instrument for coverage during elaboration (Questasim only); `0`: no coverage | `0` |
 | `--cover_types` | Coverage type letters for `vopt +cover=<types>` (e.g. `bcfs` = branch/condition/statement/FSM); only meaningful with `--cover 1` | bare `+cover` (all types) |
 | `--cover_instance` | Instance path to scope coverage instrumentation (`+cover=<types>+<instance>.`); only meaningful with `--cover 1` | whole design |
+| `--define` | Additional `+define+<MACRO>` passed to the compiler, repeatable | none |
+
+When `filelist` is set in the YAML `compile` block, the filelist is generated with [Bender](https://github.com/pulp-platform/bender) (`bender update`, then `bender script flist-plus [-t <target>]... > <filelist>`), so `bender` must be on `PATH` and a `Bender.yml` must exist in the project tree. The optional `bender_targets` key (a list, or a space-separated string) selects the `target:`-gated source groups of the Bender manifests; each target is passed as `-t <target>`, which also emits `+define+TARGET_<TARGET>` in the filelist. Duplicate targets are removed. With no target, Bender only applies its default targets.
+
+```yaml
+- tool: questa
+  compile:
+    filelist       : "${PROJECT_DIR}/simu/bender_filelist.f"
+    bender_targets : ["cv_dv_utils"]
+```
 
 ## Running a single test
 
@@ -79,7 +89,7 @@ python3 run_reg.py --yaml yaml_file.yaml --reg_list reg_list_file [--nthreads n]
 | `--cover_merge` | `1`: merge all per-test UCDBs after the regression completes (requires `--cover 1`) | `0` |
 | `--cover_excl_file` | Exclusion `.do`/`.tcl` file, sourced against the merged UCDB post-merge (requires `--cover_merge 1`); never applied unless explicitly given | none |
 | `--cover_report` | `1`: generate an HTML report from the merged UCDB after merging (requires `--cover_merge 1`) | `0` |
-| `--outdir` | Output directory | `regression` |
+| `--define` | Additional `+define+<MACRO>`, forwarded to `compile.py`, repeatable | none || `--outdir` | Output directory | `regression` |
 | `--verbose` | Print informational messages | `False` |
 
 ## Coverage (Questasim only)

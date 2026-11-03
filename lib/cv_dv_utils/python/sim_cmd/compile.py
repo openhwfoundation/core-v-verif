@@ -79,9 +79,18 @@ else:
       #Generating the filelist with Bender dependencies
       print("[INFO]: Updating Bender dependencies...")
       os.system("bender update")
+      if 'bender_targets' in comp:
+        bender_targets = comp['bender_targets']
+      else:
+        bender_targets = []
+      if isinstance(bender_targets, str):
+        bender_targets = bender_targets.split()
+      bender_targets = list(dict.fromkeys(bender_targets))
+      target_opt = "".join(f" -t {t}" for t in bender_targets)
       print("[INFO]: Creating Bender filelist...")
-      bender_filelist=f"bender script flist-plus -t cv64a60ax_cvfpu_uvm -t cvfpu_uvm > {filelist}"
-      os.system(bender_filelist)  
+      bender_filelist=f"bender script flist-plus{target_opt} > {filelist}"
+      print("[INFO]: Bender command:\n{}".format(bender_filelist))
+      os.system(bender_filelist)
       
     else:
       filelist = ""    
