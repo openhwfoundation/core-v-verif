@@ -179,7 +179,16 @@ task uvma_obi_memory_drv_c::run_phase(uvm_phase phase);
       fork
          begin : chan_a
             forever begin
-               drv_slv_gnt();
+               fork
+                  begin
+                     fork
+                        drv_slv_gnt();
+                        @(cntxt.reset_state != UVMA_OBI_MEMORY_RESET_STATE_POST_RESET);
+                     join_any
+                     disable fork;
+                     slv_mp.drv_slv_cb.gnt <= 1'b0;
+                  end
+               join
             end
          end
 
@@ -247,49 +256,59 @@ task uvma_obi_memory_drv_c::drv_post_reset();
    uvma_obi_memory_mon_trn_c        mstr_rsp;
    uvma_obi_memory_mon_trn_c        slv_rsp;
 
-   case (cfg.drv_mode)
-      UVMA_OBI_MEMORY_MODE_MSTR: begin
-         // 1. Get next req from sequence and drive it on the vif
-         seq_item_port.get_next_item(req);
-         prep_req(req);
-         if (!$cast(mstr_req, req)) begin
-            `uvm_fatal("OBI_MEMORY_DRV", $sformatf("Could not cast 'req' (%s) to 'mstr_req' (%s)", $typename(req), $typename(mstr_req)))
-         end
-         `uvm_info("OBI_MEMORY_DRV", $sformatf("Got mstr_req:\n%s", mstr_req.sprint()), UVM_HIGH)
-         drv_mstr_req(mstr_req);
+   fork
+      begin
+         fork
+            begin
+               case (cfg.drv_mode)
+                  UVMA_OBI_MEMORY_MODE_MSTR: begin
+                     // 1. Get next req from sequence and drive it on the vif
+                     seq_item_port.get_next_item(req);
+                     prep_req(req);
+                     if (!$cast(mstr_req, req)) begin
+                        `uvm_fatal("OBI_MEMORY_DRV", $sformatf("Could not cast 'req' (%s) to 'mstr_req' (%s)", $typename(req), $typename(mstr_req)))
+                     end
+                     `uvm_info("OBI_MEMORY_DRV", $sformatf("Got mstr_req:\n%s", mstr_req.sprint()), UVM_HIGH)
+                     drv_mstr_req(mstr_req);
+      
+                     // 2. Wait for the monitor to send us the slv's rsp with the results of the req
+                     wait_for_rsp(slv_rsp);
+                     process_mstr_rsp(mstr_req, slv_rsp);
+      
+                     // 3. Send out to TLM and tell sequencer we're ready for the next sequence item
+                     mstr_ap.write(mstr_req);
+                     seq_item_port.item_done();
+                  end
 
-         // 2. Wait for the monitor to send us the slv's rsp with the results of the req
-         wait_for_rsp(slv_rsp);
-         process_mstr_rsp(mstr_req, slv_rsp);
+                  UVMA_OBI_MEMORY_MODE_SLV: begin
+                     seq_item_port.try_next_item(req);
+                     if (req != null) begin
+                        // 1. Get next req from sequence to reply to mstr and drive it on the vif
+                        prep_req(req);
+                        if (!$cast(slv_req, req)) begin
+                           `uvm_fatal("OBI_MEMORY_DRV", $sformatf("Could not cast 'req' (%s) to 'slv_req' (%s)", $typename(req), $typename(slv_req)))
+                        end
+                        `uvm_info("OBI_MEMORY_DRV", $sformatf("Got slv_req:\n%s", slv_req.sprint()), UVM_HIGH)
+                        drv_slv_req(slv_req);
 
-         // 3. Send out to TLM and tell sequencer we're ready for the next sequence item
-         mstr_ap.write(mstr_req);
-         seq_item_port.item_done();
-      end
+                        // 2. Send out to TLM and tell sequencer we're ready for the next sequence item
+                        slv_ap.write(slv_req);
+                        seq_item_port.item_done();
+                     end
+                     else begin
+                        drv_slv_idle();
+                        @(slv_mp.drv_slv_cb);
+                     end
+                  end
 
-      UVMA_OBI_MEMORY_MODE_SLV: begin
-         seq_item_port.try_next_item(req);
-         if (req != null) begin
-            // 1. Get next req from sequence to reply to mstr and drive it on the vif
-            prep_req(req);
-            if (!$cast(slv_req, req)) begin
-               `uvm_fatal("OBI_MEMORY_DRV", $sformatf("Could not cast 'req' (%s) to 'slv_req' (%s)", $typename(req), $typename(slv_req)))
+                  default: `uvm_fatal("OBI_MEMORY_DRV", $sformatf("Invalid drv_mode: %0d", cfg.drv_mode))
+               endcase
             end
-            `uvm_info("OBI_MEMORY_DRV", $sformatf("Got slv_req:\n%s", slv_req.sprint()), UVM_HIGH)
-            drv_slv_req(slv_req);
-
-            // 2. Send out to TLM and tell sequencer we're ready for the next sequence item
-            slv_ap.write(slv_req);
-            seq_item_port.item_done();
-         end
-         else begin
-            drv_slv_idle();
-            @(slv_mp.drv_slv_cb);
-         end
+            @(cntxt.reset_state != UVMA_OBI_MEMORY_RESET_STATE_POST_RESET);
+         join_any
+         disable fork;
       end
-
-      default: `uvm_fatal("OBI_MEMORY_DRV", $sformatf("Invalid drv_mode: %0d", cfg.drv_mode))
-   endcase
+   join    
 
 endtask : drv_post_reset
 
@@ -448,6 +467,10 @@ task uvma_obi_memory_drv_c::drv_slv_read_req(ref uvma_obi_memory_slv_seq_item_c 
    `uvm_info("OBI_MEMORY_DRV", $sformatf("drv latency: %0d", req.rvalid_latency), UVM_HIGH)
    repeat (req.rvalid_latency) begin
       @(slv_mp.drv_slv_cb);
+      if (cntxt.vif.reset_n === 1'b0 || cntxt.reset_state != UVMA_OBI_MEMORY_RESET_STATE_POST_RESET) begin
+         drv_slv_idle();
+         return;
+      end
    end
    slv_mp.drv_slv_cb.rvalid <= 1'b1;
    if (cfg.is_1p2_or_higher()) begin
@@ -472,6 +495,10 @@ task uvma_obi_memory_drv_c::drv_slv_write_req(ref uvma_obi_memory_slv_seq_item_c
    `uvm_info("OBI_MEMORY_DRV", $sformatf("drv latency: %0d", req.rvalid_latency), UVM_HIGH)
    repeat (req.rvalid_latency) begin
       @(slv_mp.drv_slv_cb);
+      if (cntxt.vif.reset_n === 1'b0 || cntxt.reset_state != UVMA_OBI_MEMORY_RESET_STATE_POST_RESET) begin
+         drv_slv_idle();
+         return;
+      end
    end
    slv_mp.drv_slv_cb.rvalid <= 1'b1;
    if (cfg.is_1p2_or_higher()) begin
