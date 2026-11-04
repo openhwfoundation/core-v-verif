@@ -8,7 +8,7 @@ package:
 
 sources:
   -
-    target: cvfpu_uvm
+    target: cv_dv_utils
     include_dirs:
       - lib/cv_dv_utils/uvm/memory_partition
       - lib/cv_dv_utils/uvm/reset_gen

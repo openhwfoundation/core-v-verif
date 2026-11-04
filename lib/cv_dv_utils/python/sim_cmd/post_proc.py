@@ -8,8 +8,10 @@ from pathlib import Path
 parser = argparse.ArgumentParser(description='post processing options')
 parser.add_argument('--tool'     ,dest='tool_name', type=str, help='set the tool for post-processing analysis')
 parser.add_argument('--db_file'     ,dest='db_file', type=str, help='db file to launch in GUI mode for post processing')
+parser.add_argument('--designfile'  ,dest='designfile', type=str, help='design.bin file created by vopt -designfile, attached to Visualizer for schematic/class/assertion views (Questa only), default "design.bin"')
 
 args = parser.parse_args()
+designfile = args.designfile if args.designfile is not None else "design.bin"
 
 def check_extension(filename, ext):
     return Path(filename).suffix.lower() == ext.lower()
@@ -51,7 +53,10 @@ if option_ok == 1:
     if tool_name == "questa":
         print("[INFO]: Starting post-processing analysis with Questa Visualizer...")
         if check_extension(db_file, ".db"):
-            cmd = f"visualizer -wavefile {db_file}"
+            cmd = f"visualizer -designfile {designfile} -wavefile {db_file}"
+            os.system(cmd)
+        elif check_extension(db_file, ".ucdb"):
+            cmd = f"visualizer -designfile {designfile} -viewcov {db_file}"
             os.system(cmd)
         else:
             print("[ERROR]: Wrong kind of file for this tool")

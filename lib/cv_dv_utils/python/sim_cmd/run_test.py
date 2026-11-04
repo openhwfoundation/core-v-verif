@@ -29,7 +29,9 @@ parser.add_argument('--seed'     , dest='seed',      type=int, help='random seed
 parser.add_argument('--debug'    , dest='debug',     type=str, help='UVM_LOW/MEDIUM/HIGH/FULL/DEBUG, default LOW')
 parser.add_argument('--batch'    , dest='batch',     type=int, help='1: batch mode, 0:gui default, 1')
 parser.add_argument('--dump'     , dest='dump',      type=int, help='1: all signals are logged, 0: nothing is looged, default 1') #FIXME
-parser.add_argument('--cover'    , dest='cover',     type=int, help='1: generate coverage file, 0: nothing is done, cover option are passed from yaml file ') #FIXME
+parser.add_argument('--cover'    , dest='cover',     type=int, help='1: generate coverage file (Questasim only), 0: nothing is done, default 0')
+parser.add_argument('--cover_excl_file', dest='cover_excl_file', type=str, help='optional coverage exclusion .do/.tcl file, sourced before the per-test UCDB is saved; only meaningful with --cover 1, never applied unless explicitly given')
+parser.add_argument('--designfile', dest='designfile', type=str, help='design.bin file created by vopt -designfile, attached to Visualizer (GUI mode) for schematic/class/assertion views (Questa only), default "design.bin"')
 parser.add_argument('--stdout'   , dest='stdout', type=int, help='1: stdout 0: nostdout')
 parser.add_argument('--outdir'   , dest='outdir', type=str, help='output dirctory default "output"')
 parser.add_argument('--verbose'  , dest='verbose', action='store_true', help='print info messages, default False')
@@ -81,6 +83,7 @@ else:
    dump = args.dump
 
 cover = args.cover if args.cover is not None else 0
+designfile = args.designfile if args.designfile is not None else "design.bin"
 
 if args.stdout == None:
    if verbose: print("[INFO] Setting default output (-l)")
@@ -149,7 +152,10 @@ if option_ok == 1:
             ucdb_file = os.path.join(cov_dir, f"{test_name}_{seed}.ucdb")
          
          #DO
-         do_file = "questa_run.do"
+         # Unique per test/seed: a shared "questa_run.do" name races when multiple
+         # run_test.py invocations execute concurrently (e.g. --nthreads > 1) from the
+         # same working directory, silently misdirecting/losing coverage saves.
+         do_file = f"questa_run_{test_name}_{seed}.do"
          if os.path.isfile("{}".format(do_file)) == False:
             if verbose: print("[INFO]: creating new questa_run.do file...")
             os.system("touch {}".format(do_file))
@@ -162,24 +168,28 @@ if option_ok == 1:
          if batch == 1:
             batchstr = "-c"
          else:
-            batchstr = "-visualizer"
+            batchstr = f"-visualizer=+designfile={designfile}"
 
          if dump == 1:
             with open(do_file, "w") as do:
                if batch == 1:
                   if cover == 1:
+                     if args.cover_excl_file:
+                        do.write(f"source {args.cover_excl_file}\n")
                      do.write(f"coverage save -onexit {ucdb_file}\n")
                   do.write(f"run {run_time}\n")
                   do.write("quit -f\n")
                else:
                   do.write("add log -r /*\n")
 
-            dumpstr = f"-qwavedb=+wavefile={db_file}+signal+memory=4096+class+assertion -do {do_file}"
+            dumpstr = f"-qwavedb=+wavefile={db_file}+signal+memory=4096+class+assertion+ignoretxntime+msgmode=both -do {do_file}"
 
          else:
             with open(do_file, "w") as do:
                if batch == 1:
                   if cover == 1:
+                     if args.cover_excl_file:
+                        do.write(f"source {args.cover_excl_file}\n")
                      do.write(f"coverage save -onexit {ucdb_file}\n")
                   do.write(f"run {run_time}\n")
                   do.write("quit\n")
@@ -199,6 +209,11 @@ if option_ok == 1:
          sim_cmd = f"vsim -lib {worklib} {sim_opt} {batchstr} {coverstr} {dumpstr} -sv_seed {seed} +UVM_VERBOSITY={debug} +UVM_TESTNAME={test_name} {stdoutstr} {outdir}/{test_name}_{seed}.log"
          if verbose: print("[INFO] Simulation command:\n{}\n".format(sim_cmd))
          os.system(sim_cmd)
+
+         # Clean up the per-test/seed do file now that vsim has consumed it;
+         # keeping the unique name (needed to avoid the parallel-run race) but
+         # not leaving it behind avoids littering the working directory.
+         os.system(f"rm -f {do_file}")
 
       elif entry['tool'] == "xcelium":
          if cover == 1:

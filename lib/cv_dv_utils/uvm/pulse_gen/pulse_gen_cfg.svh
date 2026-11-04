@@ -103,6 +103,11 @@ class pulse_gen_cfg  extends uvm_object;
     // Phase shift shall never be > 100% 
     constraint c_pulse_phase_shift {m_pulse_phase_shift <= 100;};
 
+    // to read back the configured total number of pulses
+    function int unsigned get_pulse_num();
+       return m_pulse_num;
+    endfunction
+
     // -----------------------------------------------------------
     // APIs to configure pulse generator
     //

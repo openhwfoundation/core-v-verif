@@ -20,6 +20,7 @@
   compile:
     work_lib    : "<name>"
     filelist    : "path to the .f file which contains the list of files to be compiled included the top entity"
+    bender_targets : ["<optional Bender targets passed as -t <target> when generating the filelist>"]
     comp_option : "<compile options to propgate from top to bottom>" 
     elab_option :  "<elaboration options of the commands vopt/xrun -elaborate>"
     top_entity  :  "<top>"

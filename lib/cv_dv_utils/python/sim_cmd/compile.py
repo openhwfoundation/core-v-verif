@@ -26,6 +26,9 @@ parser = argparse.ArgumentParser(description='compile options')
 parser.add_argument('--yaml'     ,dest='yaml_file', type=str, help='Top YAML with compile and simulation options')
 parser.add_argument('--outdir'   ,dest='outdir',    type=str, help='Logs are directed to outdir: default output')
 parser.add_argument('--cover'    ,dest='cover',     type=int, help='1: instrument for coverage (adds +cover to vopt), 0: no coverage, default 0')
+parser.add_argument('--cover_types'  , dest='cover_types',   type=str, help='coverage types for vopt +cover=<types> (e.g. "bcfs" = branch/condition/statement/FSM); only meaningful with --cover 1, default: bare +cover (all types)')
+parser.add_argument('--cover_instance', dest='cover_instance', type=str, help='instance path to scope coverage instrumentation, appended as +cover=<types>+<instance>.; only meaningful with --cover 1, default: whole design')
+parser.add_argument('--define'   ,dest='defines',    action='append', help='Additional +define+<MACRO> to pass to the compiler, repeatable')
 args = parser.parse_args()
 
 cover = args.cover if args.cover is not None else 0
@@ -67,14 +70,27 @@ else:
       print("[INFO] Eliminating existing worklib {}...".format(work_lib))
       os.system("rm -r {}".format(work_lib))
 
+    #create a fresh work library; required for non-default library names, and
+    #avoids vopt silently reusing/misreading a stale library directory
+    os.system("vlib {}".format(work_lib))
+
     if 'filelist' in comp:
       filelist  = comp['filelist']
       #Generating the filelist with Bender dependencies
       print("[INFO]: Updating Bender dependencies...")
       os.system("bender update")
+      if 'bender_targets' in comp:
+        bender_targets = comp['bender_targets']
+      else:
+        bender_targets = []
+      if isinstance(bender_targets, str):
+        bender_targets = bender_targets.split()
+      bender_targets = list(dict.fromkeys(bender_targets))
+      target_opt = "".join(f" -t {t}" for t in bender_targets)
       print("[INFO]: Creating Bender filelist...")
-      bender_filelist=f"bender script flist-plus -t cv64a60ax_cvfpu_uvm -t cvfpu_uvm > {filelist}"
-      os.system(bender_filelist)  
+      bender_filelist=f"bender script flist-plus{target_opt} > {filelist}"
+      print("[INFO]: Bender command:\n{}".format(bender_filelist))
+      os.system(bender_filelist)
       
     else:
       filelist = ""    
@@ -84,12 +100,22 @@ else:
     else:
       comp_opt = ""
 
+    if args.defines:
+      comp_opt += "".join(f" +define+{d}" for d in args.defines)
+
     if 'elab_option' in comp:
        elab_opt = comp['elab_option']
     else:
        elab_opt = ""
 
-    cover_opt = "+cover" if cover == 1 else ""
+    if cover == 1:
+      cover_opt = f"+cover={args.cover_types}" if args.cover_types else "+cover"
+      if args.cover_instance:
+        cover_opt += f"+{args.cover_instance}."
+    else:
+      cover_opt = ""
+      if args.cover_types or args.cover_instance:
+        print("[INFO]: --cover_types/--cover_instance ignored because --cover is not set to 1")
 
     if 'top_entity' in comp:
       top  = comp['top_entity']
