@@ -96,7 +96,8 @@ module uvma_obi_memory_1p2_assert
   wire valid_a_phase;
   wire valid_r_phase;
 
-  aid_q_t aid_q[3:0];
+  // One entry for each value of the 5-bit pointers below
+  aid_q_t aid_q[31:0];
   bit [4:0] aid_wptr;
   bit [4:0] aid_rptr;
 
