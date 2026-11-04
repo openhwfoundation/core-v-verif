@@ -16,8 +16,10 @@
  */
 class uvma_axi_amo_synchronizer_c extends uvma_axi_synchronizer_c;
 
-   local event atomic_read;
-   local longint init_data = -1;
+   // Old value read by each atomic transaction, per AXI ID, and whether it is
+   // ready for write_data(). The two halves can run in any order.
+   local longint atomic_read_data[int];
+   local bit     atomic_read_valid[int];
 
    `uvm_component_utils(uvma_axi_amo_synchronizer_c)
 
@@ -88,7 +90,12 @@ task uvma_axi_amo_synchronizer_c::write_data();
             if(exclusive_addr[w_trs_queue[i][j].m_addr] == 1) exclusive_addr[w_trs_queue[i][j].m_addr] = -1;
 
             if(w_trs_queue[i][j].m_atop!=0)begin   // Atomic transaction
-               @atomic_read;
+               longint init_data;
+               int     atomic_id = w_trs_queue[i][j].m_id;
+               //  wait for the old value read by read_data() for this ID
+               wait (atomic_read_valid.exists(atomic_id) && atomic_read_valid[atomic_id]);
+               init_data = atomic_read_data[atomic_id];
+               atomic_read_valid[atomic_id] = 1'b0;
                if(init_data == -1) return;
 
                for(int k = w_trs_queue[i][j].lower_byte_lane; k <= w_trs_queue[i][j].upper_byte_lane; k++) begin
@@ -151,7 +158,6 @@ task uvma_axi_amo_synchronizer_c::write_data();
 
                w_trs_queue[i][j].m_data[0] = data;
                checkexclusive = 1;
-               init_data = -1;
             end
             else if(w_trs_queue[i][j].m_lock == 1 && cfg.axi_lock_enabled) begin
                `uvm_info(get_type_name(), $sformatf("EXCLUSIVE ACCESS"), UVM_HIGH)
@@ -270,8 +276,9 @@ task uvma_axi_amo_synchronizer_c::read_data(int selected_id);
                end
             end
             if(r_trs_queue[selected_id][i].m_atop != 0) begin
-               init_data = r_trs_queue[selected_id][i].m_data[0];
-               ->atomic_read;
+               //  store the old value for write_data()
+               atomic_read_data[r_trs_queue[selected_id][i].m_id]  = r_trs_queue[selected_id][i].m_data[0];
+               atomic_read_valid[r_trs_queue[selected_id][i].m_id] = 1'b1;
             end
          end else begin
             `uvm_error(get_full_name(), "YOU CAN NOT WRITE DATA IN THIS ADDRESS LOCATION")
