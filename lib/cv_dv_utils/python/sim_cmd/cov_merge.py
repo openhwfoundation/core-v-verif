@@ -7,7 +7,7 @@ import glob
 import os
 
 parser = argparse.ArgumentParser(description='merge per-test coverage UCDBs (Questasim only)')
-parser.add_argument('--tool'      , dest='tool',      type=str, help='simulator tool, only "questa" supported, default questa')
+parser.add_argument('--tool'      , dest='tool',      type=str, help='simulator tool, required, only "questa" supported')
 parser.add_argument('--outdir'    , dest='outdir',    type=str, help='regression output dir containing coverage/, default "output"')
 parser.add_argument('--out_file'  , dest='out_file',  type=str, help='merged UCDB filename under {outdir}/coverage, default "merged.ucdb"')
 parser.add_argument('--excl_file' , dest='excl_file', type=str, help='optional exclusion .do/.tcl file, sourced against the merged UCDB; produces an additional *_excluded.ucdb, leaving the merged UCDB untouched. Never applied unless explicitly given.')
@@ -15,11 +15,10 @@ parser.add_argument('--verbose'   , dest='verbose',   action='store_true', help=
 args = parser.parse_args()
 verbose = args.verbose
 
-tool     = args.tool     if args.tool     is not None else "questa"
 outdir   = args.outdir   if args.outdir   is not None else "output"
 out_file = args.out_file if args.out_file is not None else "merged.ucdb"
 
-if tool != "questa":
+if args.tool != "questa":
     print("[ERROR]: --tool option is only supported with questa")
     exit(1)
 

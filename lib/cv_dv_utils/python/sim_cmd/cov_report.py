@@ -8,7 +8,7 @@ import re
 
 parser = argparse.ArgumentParser(description='generate a coverage report from a UCDB (Questasim only)')
 parser.add_argument('--ucdb'            , dest='ucdb',            type=str, help='path to the UCDB to report on, required')
-parser.add_argument('--tool'            , dest='tool',            type=str, help='simulator tool, only "questa" supported, default questa')
+parser.add_argument('--tool'            , dest='tool',            type=str, help='simulator tool, required, only "questa" supported')
 parser.add_argument('--outdir'          , dest='outdir',          type=str, help='report output directory, default "cov_report"')
 parser.add_argument('--cover_types'     , dest='cover_types',     type=str, help='coverage type letters for -code, e.g. bcfs; omit to use tool default (all types)')
 parser.add_argument('--instance'        , dest='instance',        type=str, help='instance path for -instance=<value>. scoping (trailing dot appended automatically), optional')
@@ -22,8 +22,7 @@ parser.add_argument('--verbose'         , dest='verbose',         action='store_
 args = parser.parse_args()
 verbose = args.verbose
 
-tool = args.tool if args.tool is not None else "questa"
-if tool != "questa":
+if args.tool != "questa":
     print("[ERROR]: --tool option is only supported with questa")
     exit(1)
 
