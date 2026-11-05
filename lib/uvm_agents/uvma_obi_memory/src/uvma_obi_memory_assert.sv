@@ -160,17 +160,17 @@ module uvma_obi_memory_assert
   c_gnt_deassert_no_req : cover property(p_gnt_deassert_no_req);
 
   // R-5 ensure that rvalid is never asserted before or coincident to its address phase
-  // Model outstanding accepted addresses
-  bit [3:0] outstanding_trn_cnt;
+  // Model outstanding accepted addresses. OBI does not limit their number.
+  int unsigned outstanding_trn_cnt;
   always @(posedge clk or negedge reset_n) begin
     if (!reset_n) begin
       outstanding_trn_cnt <= 0;
     end
     else begin
       if (valid_a_phase && !valid_r_phase)
-        outstanding_trn_cnt <= outstanding_trn_cnt + 4'h1;
+        outstanding_trn_cnt <= outstanding_trn_cnt + 1;
       else if (!valid_a_phase && valid_r_phase)
-        outstanding_trn_cnt <= outstanding_trn_cnt - 4'h1;
+        outstanding_trn_cnt <= outstanding_trn_cnt - 1;
     end
   end
 
