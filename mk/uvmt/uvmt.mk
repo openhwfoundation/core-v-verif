@@ -364,6 +364,9 @@ else
 ifeq ($(SIMULATOR), xrun)
 include $(CORE_V_VERIF)/mk/uvmt/xrun.mk
 else
+ifeq ($(SIMULATOR), verilator)
+include $(CORE_V_VERIF)/mk/uvmt/verilator.mk
+else
 ifeq ($(SIMULATOR), vsim)
 include $(CORE_V_VERIF)/mk/uvmt/vsim.mk
 else
@@ -374,6 +377,7 @@ ifeq ($(SIMULATOR), riviera)
 include $(CORE_V_VERIF)/mk/uvmt/riviera.mk
 else
 include $(CORE_V_VERIF)/mk/uvmt/unsim.mk
+endif
 endif
 endif
 endif

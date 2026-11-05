@@ -74,23 +74,27 @@ task uvme_cv32e40p_reset_vseq_c::body();
    #1;
 
    `uvm_info("RST_VSEQ", $sformatf("Asserting reset for %0t", (rst_deassert_period * 1ps)), UVM_LOW)
-   `uvm_do_on_with(reset_assrt_req, p_sequencer.clknrst_sequencer, {
+   reset_assrt_req = uvma_clknrst_seq_item_c::type_id::create("reset_assrt_req");
+   start_item(reset_assrt_req, -1, p_sequencer.clknrst_sequencer);
+   if (!reset_assrt_req.randomize() with {
       action              == UVMA_CLKNRST_SEQ_ITEM_ACTION_ASSERT_RESET;
-      initial_value       == UVMA_CLKNRST_SEQ_ITEM_INITIAL_VALUE_1    ;
-      rst_deassert_period == local::rst_deassert_period; 
-   })
+      initial_value       == UVMA_CLKNRST_SEQ_ITEM_INITIAL_VALUE_1;
+      rst_deassert_period == local::rst_deassert_period;
+   }) `uvm_fatal("RST_VSEQ", "Failed to randomize reset_assrt_req")
+   finish_item(reset_assrt_req);
 
    `uvm_info("RST_VSEQ", $sformatf("Done reset, waiting %0t for DUT to stabilize", (post_rst_wait * 1ps)), UVM_LOW)
    #(post_rst_wait * 1ps);
 
    `uvm_info("RST_VSEQ", $sformatf("Starting clock with period of %0t", (cfg.sys_clk_period * 1ps)), UVM_LOW)
-   `uvm_do_on_with(clk_start_req, p_sequencer.clknrst_sequencer, {
+   clk_start_req = uvma_clknrst_seq_item_c::type_id::create("clk_start_req");
+   start_item(clk_start_req, -1, p_sequencer.clknrst_sequencer);
+   if (!clk_start_req.randomize() with {
       action        == UVMA_CLKNRST_SEQ_ITEM_ACTION_START_CLK;
       initial_value == UVMA_CLKNRST_SEQ_ITEM_INITIAL_VALUE_0;
-      //clk_period    == local::cfg.sys_clk_period;
       clk_period    == cfg.sys_clk_period;
-      //clk_period    == uvme_cv32e40p_sys_default_clk_period;
-   })
+   }) `uvm_fatal("RST_VSEQ", "Failed to randomize clk_start_req")
+   finish_item(clk_start_req);
    
 endtask : body
 

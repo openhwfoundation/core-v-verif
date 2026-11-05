@@ -212,10 +212,10 @@ function void uvmt_cv32e40p_base_test_c::build_phase(uvm_phase phase);
 
    retrieve_vifs    ();
    create_cfg       ();
+   create_cntxt     ();
    randomize_test   ();
    cfg_hrtbt_monitor();
    assign_cfg       ();
-   create_cntxt     ();
    assign_cntxt     ();
    create_env       ();
    create_components();
@@ -376,8 +376,9 @@ endfunction : retrieve_vifs
 
 function void uvmt_cv32e40p_base_test_c::create_cfg();
 
-   test_cfg = uvmt_cv32e40p_test_cfg_c::type_id::create("test_cfg");
-   env_cfg  = uvme_cv32e40p_cfg_c     ::type_id::create("env_cfg" );
+   test_cfg      = uvmt_cv32e40p_test_cfg_c     ::type_id::create("test_cfg"     );
+   env_cfg       = uvme_cv32e40p_cfg_c          ::type_id::create("env_cfg"      );
+   test_randvars = uvmt_cv32e40p_test_randvars_c::type_id::create("test_randvars");
    //ral      = env_cfg.ral;
 
 endfunction : create_cfg

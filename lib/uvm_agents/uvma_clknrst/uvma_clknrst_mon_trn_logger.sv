@@ -138,10 +138,10 @@ class uvma_clknrst_mon_trn_logger_json_c extends uvma_clknrst_mon_trn_logger_c;
       endcase
       
       fwrite({"{",
-         $sformatf("\"time\":\"%0t\","         , $realtime()    ),
-         $sformatf("\"event\":%h,"             , event_str      ),
-         $sformatf("\"clock period\":%b,"      , clk_period_str ),
-         $sformatf("\"reset pulse length\":%d,", reset_pulse_str),
+         $sformatf("\"time\":\"%0t\","             , $realtime()    ),
+         $sformatf("\"event\":\"%s\","             , event_str      ),
+         $sformatf("\"clock period\":\"%s\","      , clk_period_str ),
+         $sformatf("\"reset pulse length\":\"%s\",", reset_pulse_str),
       "},"});
       
    endfunction : write

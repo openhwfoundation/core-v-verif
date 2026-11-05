@@ -120,6 +120,7 @@ module uvmt_cv32e40p_tb;
                             )
                             dut_wrap (.*);
 
+`ifndef VERILATOR_SIM
   bind uvmt_cv32e40p_dut_wrap
     uvma_obi_memory_assert_if_wrp#(
       .ADDR_WIDTH(32),
@@ -145,7 +146,9 @@ module uvmt_cv32e40p_tb;
       .RCHK_WIDTH(0),
       .IS_1P2(0)
     ) obi_data_memory_assert_i(.obi(obi_memory_data_if));
+`endif
 
+`ifndef VERILATOR_SIM
   // Bind in verification modules to the design
   bind cv32e40p_core 
     uvmt_cv32e40p_interrupt_assert interrupt_assert_i(.mcause_n(cs_registers_i.mcause_n),
@@ -162,6 +165,7 @@ module uvmt_cv32e40p_tb;
                                                       .ctrl_fsm_cs(id_stage_i.controller_i.ctrl_fsm_cs),
                                                       .debug_mode_q(id_stage_i.controller_i.debug_mode_q),
                                                       .*);
+`endif
 
    // Debug assertion and coverage interface
    uvmt_cv32e40p_debug_cov_assert_if debug_cov_assert_if(
@@ -233,8 +237,10 @@ module uvmt_cv32e40p_tb;
     .pending_enabled_irq()
   );
 
+`ifndef VERILATOR_SIM
   // Instantiate debug assertions
   uvmt_cv32e40p_debug_assert u_debug_assert(.cov_assert_if(debug_cov_assert_if));
+`endif
 
   /**
    * ISS WRAPPER instance:
@@ -547,7 +553,7 @@ module uvmt_cv32e40p_tb;
       int                fatal_count;
       static bit         sim_finished = 0;
 
-      rs            = uvm_top.get_report_server();
+      rs            = uvm_report_server::get_server();
       err_count     = rs.get_severity_count(UVM_ERROR);
       warning_count = rs.get_severity_count(UVM_WARNING);
       fatal_count   = rs.get_severity_count(UVM_FATAL);

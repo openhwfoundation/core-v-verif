@@ -43,7 +43,6 @@ class uvme_rv32isa_covg_trn_c extends uvml_trn_mon_trn_c;
 endclass : uvme_rv32isa_covg_trn_c
 
 
-`pragma protect begin
 
 function uvme_rv32isa_covg_trn_c::new(string name="uvme_rv32isa_covg_trn");
    
@@ -75,7 +74,6 @@ function void uvme_rv32isa_covg_trn_c::do_print(uvm_printer printer);
     end
 endfunction : do_print
 
-`pragma protect end
 
 
 `endif // __UVME_RV32ISA_COVG_TRN_SV__

@@ -25,11 +25,9 @@ module uvma_debug_if_chk(
    uvma_debug_if  debug_if
 );
    
-   `pragma protect begin
    
    // TODO Add assertions to uvma_debug_if_chk
    
-   `pragma protect end
    
 endmodule : uvma_debug_if_chk
 
