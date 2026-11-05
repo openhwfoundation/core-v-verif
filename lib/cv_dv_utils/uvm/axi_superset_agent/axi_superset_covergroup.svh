@@ -1,22 +1,19 @@
 // ----------------------------------------------------------------------------
-// Copyright 2023 CEA*
-// *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
+//Copyright 2023 CEA*
+//*Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
 //
-// SPDX-License-Identifier: Apache-2.0
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+//Licensed under the Apache License, Version 2.0 (the "License");
+//you may not use this file except in compliance with the License.
+//You may obtain a copy of the License at
 //
 //    http://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+//Unless required by applicable law or agreed to in writing, software
+//distributed under the License is distributed on an "AS IS" BASIS,
+//WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//See the License for the specific language governing permissions and
+//limitations under the License.
 //[END OF HEADER]
-// ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 //  Description : Package containing all the covergroup of the axi_superset monitor
@@ -53,7 +50,9 @@ covergroup axi_superset_req_cg (ref axi_superset_txn_c packet, int unsigned id_w
   // Add other values when they are supported
   cov_burst     : coverpoint packet.m_burst
   {
-    bins incr = {INCR};
+    bins fixed = {FIXED};
+    bins incr  = {INCR};
+    bins wrap  = {WRAP};
   }
   cov_lock      : coverpoint packet.m_lock      ;
   cov_cache     : coverpoint packet.m_cache     ;
@@ -82,22 +81,23 @@ covergroup axi_superset_rsp_cg (ref axi_superset_txn_c packet, int unsigned id_w
 
 endgroup: axi_superset_rsp_cg
 
-covergroup axi_superset_dat_cg (ref axi_superset_txn_c packet, int unsigned data_width);
+covergroup axi_superset_dat_cg (int unsigned data_width)
+  with function sample( axi_superset_txn_c packet,  int unsigned index );
   option.per_instance = 1;
   // Coverpoint coverage
-  cov_data : coverpoint packet.m_data[0]
+  cov_data : coverpoint packet.m_data[index]
   {
     bins zero   = {'h0};
     bins all[8] = {['h1:2**data_width-1]};
     bins one    = {2**data_width};
   }
-  cov_wstrb : coverpoint packet.m_wstrb[0]
+  cov_wstrb : coverpoint packet.m_wstrb[index]
   {
     bins zero   = {'h0};
     bins all[8] = {['h1:2**(data_width/8)-1]};
     bins one    = {2**(data_width/8)};
   }
-  cov_resp : coverpoint packet.m_resp[0]  ;
+  cov_resp : coverpoint packet.m_resp[index]  ;
 
   // Cross coverage
 

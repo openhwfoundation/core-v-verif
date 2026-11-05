@@ -1,22 +1,19 @@
 // ----------------------------------------------------------------------------
-// Copyright 2023 CEA*
-// *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
+//Copyright 2023 CEA*
+//*Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
 //
-// SPDX-License-Identifier: Apache-2.0
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+//Licensed under the Apache License, Version 2.0 (the "License");
+//you may not use this file except in compliance with the License.
+//You may obtain a copy of the License at
 //
 //    http://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+//Unless required by applicable law or agreed to in writing, software
+//distributed under the License is distributed on an "AS IS" BASIS,
+//WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//See the License for the specific language governing permissions and
+//limitations under the License.
 //[END OF HEADER]
-// ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 
@@ -178,7 +175,7 @@ class axi_superset_base_sequence_c  extends uvm_sequence #( axi_superset_txn_c, 
     // Task in charge of sending a transaction given by the user.
     // For this task to work correctly, it is assumed that the transaction is
     // already randomized with its own constraints before giving it to the task
-    // This task wait for the responses 
+    // This task waits for the response and blocks the sequences
     // -------------------------------------------------------------------------
     protected task send_txn_get_rsp
     ( 
@@ -191,14 +188,9 @@ class axi_superset_base_sequence_c  extends uvm_sequence #( axi_superset_txn_c, 
        if ( !$cast( item_clone, item.clone() ) )
          `uvm_error(this.name,"Error during the cast of the transaction");
 
-       if ( ( 
-             ( ( item_clone.m_txn_type == AXI_WRITE_REQ ) || ( item_clone.m_txn_type == AXI_READ_REQ ) ) &&
-             ( m_sequencer.m_agent_config.get_is_master_side() )
-           ) || (
-             ( ( item_clone.m_txn_type == AXI_WRITE_RSP ) || ( item_clone.m_txn_type == AXI_READ_RSP ) ) &&
-             ( !m_sequencer.m_agent_config.get_is_master_side() )
-           )
-         ) begin
+       if ( ( ( item_clone.m_txn_type == AXI_WRITE_REQ ) || ( item_clone.m_txn_type == AXI_READ_REQ ) ) &&
+            ( m_sequencer.m_agent_config.get_is_master_side() )
+          ) begin
 
            // Start the item
            start_item( item_clone );
@@ -226,8 +218,152 @@ class axi_superset_base_sequence_c  extends uvm_sequence #( axi_superset_txn_c, 
     endtask
 
     // -------------------------------------------------------------------------
+    // TASK: send_exclusive_txn
+    // WARNING : This task is an example of how an exclusive access can be
+    // processed on the master side from the start to the end.
+    // It should be used as an example for the user to develop its own
+    // sequence sending exclusive access, or can be used to check if the slave
+    // support exclusive access, but doesn't contains all the available
+    // features of AXI exclusive accesses.
+    // List of the features not contained:
+    //  - The user can't choose the parameter of the exclusive access
+    //  ( metadata && data )
+    //  - The task blocks the sequence until the end of the exclusive acces:
+    //  sending other transactions in parallel of this exclusive access may
+    //  result in unpredictable behavior.
+    //  - The write part is done just after the read part of the exclusive
+    //  access, not some time later.
+    //  - The master will not abandon the exclusive operation, it will
+    //  complete the write portion.
+    // -------------------------------------------------------------------------
+    virtual task send_exclusive_txn
+    ( 
+      input axi_dv_ver_t   ver  = AXI4,
+      input axi_dv_lite_t  lite = NO_LITE,
+      input axi_dv_err_t   err  = NO_ERR,
+      input int txn_number = 0
+    );
+
+      axi_superset_txn_c  req; 
+      axi_superset_txn_c  rsp; 
+      enable_manage_response = 1; 
+
+      // Creating the transaction and setting its configuration before the
+      // randomization
+      req = axi_superset_txn_c::type_id::create("item");
+      req.set_config( m_sequencer.get_agent_config().get_txn_config() ) ;
+
+      // Randomization of the transaction
+      if (!req.randomize() with 
+      { 
+        m_txn_type    == AXI_READ_REQ ;
+        m_axi_version == ver  ;
+        m_lite        == lite ;
+        m_err         == err  ;
+        m_lock        == EXCLUSIVE ;
+      } )
+        `uvm_error(this.name,"Error randomizing the request metadata");
+      `uvm_info( this.name, $sformatf("READ_EXCL_REQ, Info: %0s", req.convert2string()) , UVM_DEBUG)
+
+      // Start the item
+      start_item( req );
+
+      // Waiting for the ID to be free to use, then register it
+      wait( !m_sequencer.is_id_used( AXI_READ_REQ, req.m_id ) );
+      m_sequencer.register_id( req.m_atop, req.m_txn_type, req.m_id, this.name );
+
+      // Increment the counter for debug purposes
+      current_num_read_txn++;
+
+      // Send the transction to the driver
+      finish_item( req );
+
+      // Waiting for the read response
+      get_rd_rsp(req.m_id, rsp);
+      `uvm_info( this.name, $sformatf("READ_EXCL_RSP, Info: %0s", rsp.convert2string()) , UVM_DEBUG)
+
+      // Checking the response error value and exiting the task if a value
+      // different from EXOKAY was received
+      // If EXOKAY and OKAY are mixed in the response, there is a problem on
+      // the slave side 
+      foreach( rsp.m_resp[i] ) begin
+        case ( rsp.m_resp[i] )
+          OKAY : begin
+            `uvm_info( this.name, "Exclusive transactions are not supported by the slave, ending the send_exclusive_txn task now" , UVM_LOW)
+            return;
+          end
+          EXOKAY : begin
+            `uvm_info( this.name, "Exclusive transactions are supported by the slave, sending now the write part of the exclusive transaction" , UVM_LOW)
+          end
+          SLVERR , DECERR : begin
+            `uvm_error( this.name, $sformatf("An error was sent back in the read response, READ RSP Info: %0s", rsp.convert2string()) )
+            return;
+          end 
+          default : begin
+            `uvm_error( this.name, "Unsupported response error value" )
+            return;
+          end
+        endcase
+      end // foreach
+
+      // An EXOKAY response was received, sending now the write part of the
+      // exclusive transaction
+      // Start the item
+      start_item( req );
+
+      // Keeping all the fields ( addr, id, ... ) of the read request for the
+      // write request, just changing the type from READ to WRITE
+      // Randomization of the transaction
+      if (!req.randomize() with 
+      { 
+        m_txn_type    == AXI_WRITE_REQ ;
+        m_axi_version == ver  ;
+        m_lite        == lite ;
+        m_err         == err  ;
+        m_lock        == EXCLUSIVE ;
+        m_addr        == req.m_addr ;
+        m_id          == req.m_id ;
+      } )
+        `uvm_error(this.name,"Error randomizing the request metadata");
+      `uvm_info( this.name, $sformatf("WRITE_EXCL_REQ, Info: %0s", req.convert2string()) , UVM_DEBUG)
+
+      // Waiting for the ID to be free to use, then register it
+      wait( !m_sequencer.is_id_used( AXI_WRITE_REQ, req.m_id ) );
+      m_sequencer.register_id( req.m_atop, req.m_txn_type, req.m_id, this.name );
+
+      // Increment the counter for debug purposes
+      current_num_write_txn++;
+
+      // Send the transction to the driver
+      finish_item( req );
+
+      // Waiting for the response
+      get_wr_rsp(req.m_id, rsp);
+      `uvm_info( this.name, $sformatf("WRITE_EXCL_RSP, Info: %0s", rsp.convert2string()) , UVM_DEBUG)
+      // Checking the response error value and exiting the task if a value
+      // different from EXOKAY was received
+      case ( rsp.m_resp[0] )
+        OKAY : begin
+          `uvm_info( this.name, "The content of the addressed location has been updated since the exclusive read, the exclusive access is a fail" , UVM_LOW)
+        end
+        EXOKAY : begin
+          `uvm_info( this.name, "The exclusive transaction was a success" , UVM_LOW)
+        end
+        SLVERR , DECERR : begin
+          `uvm_error( this.name, $sformatf("An error was sent back in the write response, WRITE RSP Info: %0s", rsp.convert2string()) )
+        end 
+        default : begin
+          `uvm_error( this.name, "Unsupported response error value" )
+        end
+      endcase
+
+      `uvm_info( this.name, "Ending the send_exclusive_txn task" , UVM_DEBUG)
+
+    endtask
+
+    // -------------------------------------------------------------------------
     // TASK: send_uniflit_req
-    // Task in charge of sending a random request.
+    // Task in charge of sending a random request with an unique flit.
     // By default, the transaction is an AXI4 request with no error. 
     // This task should only be used in a sequence for a Master agent.
     // -------------------------------------------------------------------------
@@ -253,7 +389,46 @@ class axi_superset_base_sequence_c  extends uvm_sequence #( axi_superset_txn_c, 
         m_axi_version == ver  ;
         m_lite        == lite ;
         m_err         == err  ;
-        m_len         == 1    ;
+        m_len         == 0    ;
+        m_lock        == NORMAL ;
+      } )
+        `uvm_error(this.name,"Error randomizing the request metadata");
+      `uvm_info( this.name, $sformatf("REQ, Info: %0s", item.convert2string()) , UVM_DEBUG)
+
+        send_txn( item, txn_number );
+
+    endtask
+
+    // -------------------------------------------------------------------------
+    // TASK: send_multiflit_req
+    // Task in charge of sending a random request with multiple flits.
+    // By default, the transaction is an AXI4 request with no error. 
+    // This task should only be used in a sequence for a Master agent.
+    // -------------------------------------------------------------------------
+    virtual task send_multiflit_req
+    ( 
+      input axi_dv_ver_t   ver  = AXI4,
+      input axi_dv_lite_t  lite = NO_LITE,
+      input axi_dv_err_t   err  = NO_ERR,
+      input int txn_number = 0
+    );
+
+      axi_superset_txn_c  item; 
+
+      // Creating the transaction and setting its configuration before the
+      // randomization
+      item = axi_superset_txn_c::type_id::create("item");
+      item.set_config( m_sequencer.get_agent_config().get_txn_config() ) ;
+
+      // Randomization of the transaction
+      if (!item.randomize() with 
+      { 
+        m_txn_type inside {AXI_WRITE_REQ, AXI_READ_REQ};
+        m_axi_version == ver  ;
+        m_lite        == lite ;
+        m_err         == err  ;
+        m_len         <= 15   ;
+        m_lock        == NORMAL ;
       } )
         `uvm_error(this.name,"Error randomizing the request metadata");
       `uvm_info( this.name, $sformatf("REQ, Info: %0s", item.convert2string()) , UVM_DEBUG)
@@ -290,6 +465,43 @@ class axi_superset_base_sequence_c  extends uvm_sequence #( axi_superset_txn_c, 
         m_lite        == lite          ;
         m_err         == err           ;
         m_len         == 0             ;
+        m_lock        == NORMAL ;
+      } )
+        `uvm_error(this.name,"Error randomizing the write request metadata");
+
+      send_txn( item, txn_number );
+
+    endtask
+
+    // -------------------------------------------------------------------------
+    // TASK: send_multiflit_write
+    // Task in charge of sending a write request with multiple flits
+    // By default, the transaction is an AXI4 request with no error. 
+    // This task should only be used in a sequence for a Master agent.
+    // -------------------------------------------------------------------------
+    protected task send_multiflit_write
+    (
+      input axi_dv_ver_t      ver  = AXI4,
+      input axi_dv_lite_t     lite = NO_LITE,
+      input axi_dv_err_t      err  = NO_ERR,
+      input int txn_number = 0
+    );
+
+      axi_superset_txn_c  item; 
+
+      // Creating the transaction with its configuration
+      item = axi_superset_txn_c::type_id::create("item");
+      item.set_config( m_sequencer.get_agent_config().get_txn_config() ) ;
+
+      // Randomizing the transaction
+      if (!item.randomize() with 
+      { 
+        m_txn_type    == AXI_WRITE_REQ ;
+        m_axi_version == ver           ;
+        m_lite        == lite          ;
+        m_err         == err           ;
+        m_len         <= 15   ;
+        m_lock        == NORMAL ;
       } )
         `uvm_error(this.name,"Error randomizing the write request metadata");
 
@@ -325,6 +537,44 @@ class axi_superset_base_sequence_c  extends uvm_sequence #( axi_superset_txn_c, 
         m_lite        == lite         ;
         m_err         == err          ;
         m_len         == 0            ;
+        m_lock        == NORMAL ;
+      } )
+        `uvm_error(this.name,"Error randomizing the read request metadata");
+
+      // Sending the transaction via the send_txn task
+      send_txn( item, txn_number);
+
+    endtask
+
+    // -------------------------------------------------------------------------
+    // TASK: send_multiflit_read
+    // Task in charge of sending a read request
+    // By default, the transaction is an AXI4 request with no error. 
+    // This task should only be used in a sequence for a Master agent.
+    // -------------------------------------------------------------------------
+    protected task send_multiflit_read
+    (
+      input axi_dv_ver_t      ver     = AXI4,
+      input axi_dv_lite_t     lite    = NO_LITE,
+      input axi_dv_err_t      err     = NO_ERR,
+      input int txn_number = 0
+    );
+
+      axi_superset_txn_c  item;
+
+      // Creating the transaction with its configuration
+      item = axi_superset_txn_c::type_id::create("item");
+      item.set_config( m_sequencer.get_agent_config().get_txn_config() ) ;
+
+      // Randomization of the transaction
+      if (!item.randomize() with 
+      { 
+        m_txn_type    == AXI_READ_REQ ;
+        m_axi_version == ver          ;
+        m_lite        == lite         ;
+        m_err         == err          ;
+        m_len         <= 15   ;
+        m_lock        == NORMAL ;
       } )
         `uvm_error(this.name,"Error randomizing the read request metadata");
 
@@ -490,6 +740,7 @@ endclass
 // - axi_superset_master_sequence_c
 // - axi_superset_master_write_sequence_c
 // - axi_superset_master_read_sequence_c
+// - axi_superset_reactive_slave_sequence_c
 // -------------------------------------------------------------------------
 
 // -----------------------------------------------------------------------
@@ -515,7 +766,7 @@ class axi_superset_master_sequence_c  extends axi_superset_base_sequence_c ;
 
     // Sending `num_txn random transactions
     for ( int i = 0 ; i < num_txn ; i++ ) begin
-      send_uniflit_req(.txn_number(i));
+      send_multiflit_req(.txn_number(i));
     end
     // Waiting for the reception of all responses
     wait( num_txn == num_rsp );
@@ -548,7 +799,7 @@ class axi_superset_master_write_sequence_c  extends axi_superset_base_sequence_c
 
     // Sending `num_txn random write only transactions
     for ( int i = 0 ; i < num_txn ; i++ ) begin
-      send_uniflit_write(.txn_number(i));
+      send_multiflit_write(.txn_number(i));
     end
     // Waiting for the reception of all responses
     wait( num_txn == num_rsp );
@@ -581,7 +832,7 @@ class axi_superset_master_read_sequence_c  extends axi_superset_base_sequence_c 
 
     // Sending `num_txn random read only transactions
     for ( int i = 0 ; i < num_txn ; i++ ) begin
-      send_uniflit_read(.txn_number(i));
+      send_multiflit_read(.txn_number(i));
     end
     // Waiting for the reception of all responses
     wait( num_txn == num_rsp );
@@ -589,3 +840,138 @@ class axi_superset_master_read_sequence_c  extends axi_superset_base_sequence_c 
   endtask: body
 
 endclass: axi_superset_master_read_sequence_c
+
+// -----------------------------------------------------------------------
+// axi_superset_master_excl_sequence_c
+// Sequence which send `num_txn random read only request transactions from the master
+// -----------------------------------------------------------------------
+class axi_superset_master_excl_sequence_c  extends axi_superset_base_sequence_c ;
+  `uvm_object_utils(axi_superset_master_excl_sequence_c)
+
+  // -----------------------------------------------------------------------
+  // Constructor
+  // -----------------------------------------------------------------------
+  function new(string name = "axi_superset_master_excl_sequence_c", int number_txn = -1 );
+      super.new(name, number_txn);
+  endfunction:new
+
+  // -----------------------------------------------------------------------
+  // Body
+  // -----------------------------------------------------------------------
+  virtual task body( );
+    super.body();
+    `uvm_info(this.name, "Sequence axi_superset_master_excl_sequence_c is starting", UVM_DEBUG)
+
+    // Sending `num_txn random read only transactions
+    for ( int i = 0 ; i < num_txn ; i++ ) begin
+      send_exclusive_txn(.txn_number(i));
+    end
+    // Waiting for the reception of all responses
+    // wait( num_txn == num_rsp );
+    `uvm_info(this.name, "Sequence axi_superset_master_excl_sequence_c is ending", UVM_DEBUG)
+  endtask: body
+
+endclass: axi_superset_master_excl_sequence_c
+
+// -----------------------------------------------------------------------
+// axi_superset_slave_sequence_c
+// Sequence which send `num_txn random request transaction from the slave
+// -----------------------------------------------------------------------
+class axi_superset_reactive_slave_sequence_c extends axi_superset_base_sequence_c ;
+  `uvm_object_utils(axi_superset_reactive_slave_sequence_c)
+
+  // -----------------------------------------------------------------------
+  // Constructor
+  // -----------------------------------------------------------------------
+  function new(string name = "axi_superset_reactive_slave_sequence_c", int number_txn = -1 );
+      super.new(name, number_txn);
+  endfunction:new
+
+  // -----------------------------------------------------------------------
+  // Body
+  // -----------------------------------------------------------------------
+  virtual task body( );
+    axi_superset_txn_c  req;
+    axi_superset_txn_c  rsp;
+    axi_superset_txn_c  atop_rsp;
+
+    super.body();
+
+    `uvm_info(this.name, "Sequence axi_superset_reactive_slave_sequence_c is starting", UVM_DEBUG)
+
+    req = axi_superset_txn_c::type_id::create("req");
+    req.set_config( m_sequencer.get_agent_config().get_txn_config() ) ;
+
+    forever begin
+      m_sequencer.m_mon2seq_export.get(req);
+
+      `uvm_info(this.name, "Getting a new request, generating its response", UVM_DEBUG)
+
+      case ( req.m_txn_type )
+        AXI_WRITE_REQ : begin
+          rsp = axi_superset_txn_c::type_id::create("rsp");
+          rsp.set_config( m_sequencer.get_agent_config().get_txn_config() ) ;
+
+          // Randomization of the response
+          if (!rsp.randomize() with 
+          { 
+            m_txn_type    == AXI_WRITE_RSP ;
+            m_axi_version == req.m_axi_version  ;
+            m_lite        == req.m_lite ;
+            m_err         == req.m_err  ;
+            m_id          == req.m_id   ;
+          } )
+            `uvm_error(this.name,"Error randomizing the request metadata");
+          
+          // Sending the response to the driver
+          `uvm_info(this.name, $sformatf("Generating new write rsp TXN_ID=%0h(h)", rsp.m_id), UVM_DEBUG)
+          send_txn( rsp ) ;
+
+          // Generating an additional read response if the request is an
+          // atomic
+          if ( req.m_atop[5] ) begin
+            atop_rsp = axi_superset_txn_c::type_id::create("atop_rsp");
+            atop_rsp.set_config( m_sequencer.get_agent_config().get_txn_config() ) ;
+
+            if (!atop_rsp.randomize() with
+            { m_txn_type           == AXI_READ_RSP  ;
+              m_axi_version        == m_axi_version ;
+              m_id                 == req.m_id  ;
+              m_len                == req.m_len ;
+            } )
+              `uvm_error(this.name,"Error randomizing the request metadata");
+            // Sending the response to the driver
+            `uvm_info(this.name, $sformatf("Generating an additional read rsp TXN_ID=%0h(h)", rsp.m_id), UVM_DEBUG)
+            send_txn( atop_rsp ) ;
+          end
+
+        end
+
+        AXI_READ_REQ : begin
+          rsp = axi_superset_txn_c::type_id::create("rsp");
+          rsp.set_config( m_sequencer.get_agent_config().get_txn_config() ) ;
+
+          if (!rsp.randomize() with 
+            { m_txn_type           == AXI_READ_RSP      ;
+              m_axi_version        == req.m_axi_version ;
+              m_id                 == req.m_id          ;
+              m_len                == req.m_len         ;
+            } )
+            `uvm_error(this.name,"Error randomizing the request metadata");
+          // Sending the response to the driver
+          `uvm_info(this.name, $sformatf("Generating new read rsp TXN_ID=%0h(h)", rsp.m_id), UVM_DEBUG)
+          send_txn( rsp ) ;
+
+        end
+        default : begin
+
+        end
+      endcase
+    end // forever
+
+    `uvm_info(this.name, "Sequence axi_superset_reactive_slave_sequence_c is ending", UVM_DEBUG)
+  endtask: body
+
+endclass: axi_superset_reactive_slave_sequence_c
+
+

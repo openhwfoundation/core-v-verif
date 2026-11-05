@@ -1,22 +1,19 @@
 // ----------------------------------------------------------------------------
-// Copyright 2023 CEA*
-// *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
+//Copyright 2023 CEA*
+//*Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
 //
-// SPDX-License-Identifier: Apache-2.0
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+//Licensed under the Apache License, Version 2.0 (the "License");
+//you may not use this file except in compliance with the License.
+//You may obtain a copy of the License at
 //
 //    http://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+//Unless required by applicable law or agreed to in writing, software
+//distributed under the License is distributed on an "AS IS" BASIS,
+//WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//See the License for the specific language governing permissions and
+//limitations under the License.
 //[END OF HEADER]
-// ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 //  Description : Monitor AXI requests and responses
@@ -54,7 +51,7 @@ class axi_superset_monitor_c extends uvm_monitor;
     protected string       name ;
     protected string       interface_name ;
     protected axi_dv_ver_t axi_version ;
-    protected bit          covergroup_enable ;
+    protected bit          is_master_side ;
 
     event reset_asserted ;
     event reset_deasserted ;
@@ -80,30 +77,15 @@ class axi_superset_monitor_c extends uvm_monitor;
     uvm_analysis_port #(axi_superset_txn_c) m_axi_superset_read_rsp_packets_collected  ;
     uvm_analysis_port #(axi_superset_txn_c) m_axi_superset_write_rsp_packets_collected ;
 
+    uvm_analysis_port #(axi_superset_txn_c) m_axi_superset_mon2seq_packets_collected   ;
+
     // -----------------------------------------------------------------------
     // Transaction queue for write packect
     // -----------------------------------------------------------------------
     axi_superset_txn_c m_queue_write_req[$];
     axi_superset_txn_c m_queue_write_dat[$];
 
-    // -----------------------------------------------------------------------
-    // Coverage covergroups
-    // -----------------------------------------------------------------------
-    // Covergroup
-    axi_superset_req_cg   m_axi_superset_read_req_cg  ;
-    axi_superset_req_cg   m_axi_superset_write_req_cg ;
-    axi_superset_rsp_cg   m_axi_superset_read_rsp_cg  ;
-    axi_superset_rsp_cg   m_axi_superset_write_rsp_cg ;
-    axi_superset_dat_cg   m_axi_superset_read_dat_cg  ;
-    axi_superset_dat_cg   m_axi_superset_write_dat_cg ;
-
-    // Packets for the covergroup
-    axi_superset_txn_c  m_axi_superset_read_req_packet  ;
-    axi_superset_txn_c  m_axi_superset_write_req_packet ;
-    axi_superset_txn_c  m_axi_superset_read_rsp_packet  ;
-    axi_superset_txn_c  m_axi_superset_write_rsp_packet ;
-    axi_superset_txn_c  m_axi_superset_read_dat_packet  ;
-    axi_superset_txn_c  m_axi_superset_write_dat_packet ;
+    axi_superset_txn_c m_read_rsp_db[axi_sig_id_t][$]  ;
 
     // -----------------------------------------------------------------------
     // Counter for the number of request/response that the monitor detects
@@ -128,59 +110,20 @@ class axi_superset_monitor_c extends uvm_monitor;
     // -----------------------------------------------------------------------
     function void build_phase(uvm_phase phase);
         string interface_name;
-        int unsigned id_width   ;
-        int unsigned addr_width ;
-        int unsigned data_width ;
-        int unsigned user_width ;
 
         super.build_phase(phase);
 
         // Get the driver configuration from the agent configuration
         interface_name    = m_agent_config.get_interface_name();
         axi_version       = m_agent_config.get_axi_version();
-        covergroup_enable = m_agent_config.get_covergroup_enable();
-
-        // Covergroup bus size configuration
-        id_width         = m_agent_config.get_txn_config().get_id_width();
-        addr_width       = m_agent_config.get_txn_config().get_addr_width();
-        data_width       = m_agent_config.get_txn_config().get_data_width();
+        is_master_side    = m_agent_config.get_is_master_side();
 
         // Instantiation of the uvm_analysis_port
         m_axi_superset_write_req_packets_collected = new("m_axi_superset_write_req_packets_collected" , this) ;
         m_axi_superset_read_req_packets_collected  = new("m_axi_superset_read_req_packets_collected"  , this) ;
         m_axi_superset_write_rsp_packets_collected = new("m_axi_superset_write_rsp_packets_collected" , this) ;
         m_axi_superset_read_rsp_packets_collected  = new("m_axi_superset_read_rsp_packets_collected"  , this) ;
-
-        if ( covergroup_enable ) begin
-          // Instantiation of the packet for the covergroups
-          m_axi_superset_read_req_packet  = new("m_axi_superset_read_req_packet"  ) ;
-          m_axi_superset_write_req_packet = new("m_axi_superset_write_req_packet" ) ;
-          m_axi_superset_read_rsp_packet  = new("m_axi_superset_read_rsp_packet"  ) ;
-          m_axi_superset_write_rsp_packet = new("m_axi_superset_write_rsp_packet" ) ;
-          m_axi_superset_read_dat_packet  = new("m_axi_superset_read_dat_packet"  ) ;
-          m_axi_superset_write_dat_packet = new("m_axi_superset_write_dat_packet" ) ;
-
-           // Creation of covergroups
-          m_axi_superset_read_req_cg  = new( m_axi_superset_read_req_packet  , id_width , addr_width) ;
-          m_axi_superset_write_req_cg = new( m_axi_superset_write_req_packet , id_width , addr_width) ;
-          m_axi_superset_read_rsp_cg  = new( m_axi_superset_read_rsp_packet  , id_width ) ;
-          m_axi_superset_write_rsp_cg = new( m_axi_superset_write_rsp_packet , id_width ) ;
-          m_axi_superset_read_dat_cg  = new( m_axi_superset_read_dat_packet  , data_width) ;
-          m_axi_superset_write_dat_cg = new( m_axi_superset_write_dat_packet , data_width) ;
-
-          m_axi_superset_read_req_cg.option.name  = $sformatf("%0s_read_req_cg"  , this.name) ;
-          m_axi_superset_write_req_cg.option.name = $sformatf("%0s_write_req_cg" , this.name) ;
-          m_axi_superset_read_rsp_cg.option.name  = $sformatf("%0s_read_rsp_cg"  , this.name) ;
-          m_axi_superset_write_rsp_cg.option.name = $sformatf("%0s_write_rsp_cg" , this.name) ;
-          m_axi_superset_read_dat_cg.option.name  = $sformatf("%0s_read_dat_cg"  , this.name) ;
-          m_axi_superset_write_dat_cg.option.name = $sformatf("%0s_write_dat_cg" , this.name) ;
-
-          // Deactivating some coverpoints for some covergroup
-          m_axi_superset_write_req_cg.cov_atop.option.weight = 0 ;
-          m_axi_superset_read_rsp_cg.cov_resp.option.weight  = 0 ;
-          m_axi_superset_read_dat_cg.cov_wstrb.option.weight = 0 ;
-          m_axi_superset_write_dat_cg.cov_resp.option.weight = 0 ;
-        end // covergroup_enable
+        m_axi_superset_mon2seq_packets_collected   = new("m_axi_superset_mon2seq_packets_collected"   , this) ;
 
         // Initialisation of the value of the counter
         m_num_rreq_pkts = 0 ;
@@ -224,6 +167,7 @@ class axi_superset_monitor_c extends uvm_monitor;
         super.reset_phase(phase);
         m_queue_write_req.delete();
         m_queue_write_dat.delete();
+        m_read_rsp_db.delete();
 
         // Initialisation of the value of the counter
         m_num_rreq_pkts = 0 ;
@@ -280,6 +224,8 @@ class axi_superset_monitor_c extends uvm_monitor;
                 // Creating a new object to send to the scoreboard,
                 // and get requests informations into it
                 wreq = new();
+                wreq.m_txn_config   = m_agent_config.get_txn_config( );
+
                 wreq.m_id           = m_axi_superset_vif.aw_id                                ;
                 wreq.m_addr         = m_axi_superset_vif.aw_addr                              ;
                 wreq.m_len          = m_axi_superset_vif.aw_len                               ;
@@ -307,14 +253,13 @@ class axi_superset_monitor_c extends uvm_monitor;
                 wreq.m_axi_version  = axi_version   ;
                 wreq.m_timestamp.push_back($time)   ;
 
+                // Generating the flit_addr / lower_byte_lane
+                // upper_byte_lane for the transaction, to help for debug or
+                // on slave side
+                wreq.post_randomize() ;
+
                 // Print information about the transaction
                 `uvm_info( this.name, $sformatf("WRITE_REQ=%0d(d), Info: %0s",m_num_wreq_pkts, wreq.convert2string()) , UVM_DEBUG)
-
-                if ( covergroup_enable ) begin
-                  // Sample for the coverage
-                  $cast( m_axi_superset_write_req_packet, wreq.clone() );
-                  m_axi_superset_write_req_cg.sample( );
-                end
 
                 // Push the write address request into a queue for the
                 // combine_write_req_data_task
@@ -378,11 +323,6 @@ class axi_superset_monitor_c extends uvm_monitor;
                 // Print informations about the transaction
                 `uvm_info( this.name, $sformatf("WRITE_DAT=%0d(d), Info: %0s",m_num_wdat_pkts, wreq_data.convert2string()) , UVM_DEBUG)
 
-                if ( covergroup_enable ) begin
-                  // Sample for the coverage
-                  $cast( m_axi_superset_write_dat_packet, wreq_data.clone() );
-                  m_axi_superset_write_dat_cg.sample( );
-                end
                 // Push the Write data packet into the queue for the
                 // combine_write_req_data_task
                 m_queue_write_dat.push_back(wreq_data);
@@ -456,6 +396,8 @@ class axi_superset_monitor_c extends uvm_monitor;
 
             // Sending the transaction to the scoreboard
             m_axi_superset_write_req_packets_collected.write(wreq_txn);
+            if ( !is_master_side )
+              m_axi_superset_mon2seq_packets_collected.write(wreq_txn);
 
             fork
                 begin
@@ -524,14 +466,10 @@ class axi_superset_monitor_c extends uvm_monitor;
                 // Print the information about the transaction
                 `uvm_info( this.name, $sformatf("READ_REQ=%0d(d), Info: %0s",m_num_rreq_pkts, rreq.convert2string()) , UVM_DEBUG)
 
-                if ( covergroup_enable ) begin
-                  // Sample for the coverage
-                  $cast( m_axi_superset_read_req_packet, rreq.clone() );
-                  m_axi_superset_read_req_cg.sample( );
-                end
-
                 // Send object to the scoreboard
                 m_axi_superset_read_req_packets_collected.write(rreq);
+                if ( !is_master_side )
+                  m_axi_superset_mon2seq_packets_collected.write(rreq);
 
                 // Increment the Read request counter
                 m_num_rreq_pkts++;
@@ -583,12 +521,6 @@ class axi_superset_monitor_c extends uvm_monitor;
                 // Print information about the transaction
                 `uvm_info( this.name, $sformatf("WRITE_RSP=%0d(d), Info: %0s",m_num_wrsp_pkts, wrsp.convert2string()) , UVM_DEBUG)
 
-                if ( covergroup_enable ) begin
-                  // Sample for the coverage
-                  $cast( m_axi_superset_write_rsp_packet, wrsp.clone() );
-                  m_axi_superset_write_rsp_cg.sample( );
-                end
-
                 // Send object to the scoreboard
                 m_axi_superset_write_rsp_packets_collected.write(wrsp);
 
@@ -617,8 +549,6 @@ class axi_superset_monitor_c extends uvm_monitor;
     // -----------------------------------------------------------------------
     task receive_R_channel_transaction_task(uvm_phase phase);
         axi_superset_txn_c rrsp;
-        axi_superset_txn_c rdat;
-        int flag_last;
 
         forever begin
             @(posedge m_axi_superset_vif.clk_i);
@@ -630,63 +560,47 @@ class axi_superset_monitor_c extends uvm_monitor;
                 // Creating a new object to send to the scoreboard,
                 // and get requests informations into it
                 rrsp = new() ;
-                flag_last = 0 ;
 
-                while ( !flag_last ) begin
-                    if (m_axi_superset_vif.r_valid && m_axi_superset_vif.r_ready) begin
-                        // Creating a dummy transaction only to sample it for
-                        // the read data covergroup
-                        rdat = new();
-                        rdat.m_txn_type        = AXI_READ_RSP ;
-                        rdat.append_read_flit(m_axi_superset_vif.r_data,
-                                              axi_dv_resp_t'(m_axi_superset_vif.r_resp),
-                                              m_axi_superset_vif.r_last);
+                if ( m_read_rsp_db.exists( m_axi_superset_vif.r_id ) )
+                  rrsp = m_read_rsp_db[m_axi_superset_vif.r_id].pop_front() ;
 
-                        // Creating a read response transaction to sample it
-                        // and send it to the scoreboard
-                        rrsp.m_id         = m_axi_superset_vif.r_id     ;
-                        rrsp.append_read_flit(m_axi_superset_vif.r_data,
-                                              axi_dv_resp_t'(m_axi_superset_vif.r_resp),
-                                              m_axi_superset_vif.r_last);
-                        rrsp.m_user       = m_axi_superset_vif.r_user   ;
-                        rrsp.m_trace      = m_axi_superset_vif.r_trace  ;
-                        rrsp.m_loop       = m_axi_superset_vif.r_loop   ;
-                        rrsp.m_idunq      = m_axi_superset_vif.r_idunq  ;
-                        rrsp.m_poison     = m_axi_superset_vif.r_poison ;
+                // Creating a read response transaction to sample it
+                // and send it to the scoreboard
+                rrsp.m_id         = m_axi_superset_vif.r_id     ;
+                rrsp.append_read_flit(m_axi_superset_vif.r_data,
+                                      axi_dv_resp_t'(m_axi_superset_vif.r_resp),
+                                      m_axi_superset_vif.r_last);
+                rrsp.m_user       = m_axi_superset_vif.r_user   ;
+                rrsp.m_trace      = m_axi_superset_vif.r_trace  ;
+                rrsp.m_loop       = m_axi_superset_vif.r_loop   ;
+                rrsp.m_idunq      = m_axi_superset_vif.r_idunq  ;
+                rrsp.m_poison     = m_axi_superset_vif.r_poison ;
 
-                        rrsp.m_txn_type        = AXI_READ_RSP ;
-                        rrsp.m_axi_version     = axi_version  ;
-                        rrsp.m_timestamp.push_back($time)     ;
+                rrsp.m_txn_type        = AXI_READ_RSP ;
+                rrsp.m_axi_version     = axi_version  ;
+                rrsp.m_timestamp.push_back($time)     ;
+                `uvm_info( this.name, $sformatf("READ_RSP=%0d(d), Info: %0s",m_num_rrsp_pkts, rrsp.convert2string()) , UVM_NONE)
 
-                        if ( covergroup_enable ) begin
-                          // Sample for the coverage
-                          // Sample read payload
-                          $cast( m_axi_superset_read_dat_packet, rdat.clone() );
-                          m_axi_superset_read_dat_cg.sample( );
-                        end
+                if ( m_axi_superset_vif.r_last ) begin
+                  // Complete the transaction and put it in the analysis_port
+                  // Print the information about the transaction
+                  `uvm_info( this.name, $sformatf("READ_RSP=%0d(d), Info: %0s",m_num_rrsp_pkts, rrsp.convert2string()) , UVM_DEBUG)
+                  
+                  // Send object to the scoreboard
+                  m_axi_superset_read_rsp_packets_collected.write(rrsp);
 
-                        // Checking if this flit is the last of the
-                        // transaction
-                        flag_last = rrsp.m_last[rrsp.m_last.size() - 1] ;
-                    end
-                    if ( !flag_last )
-                      @(posedge m_axi_superset_vif.clk_i);
-                end // while
+                  // Remove the ID from the queue
+                  m_read_rsp_db.delete(rrsp.m_id);
 
-                // Print the information about the transaction
-                `uvm_info( this.name, $sformatf("READ_RSP=%0d(d), Info: %0s",m_num_rrsp_pkts, rrsp.convert2string()) , UVM_DEBUG)
-
-                if ( covergroup_enable ) begin
-                  // Sample read response metadata
-                  $cast( m_axi_superset_read_rsp_packet, rrsp.clone() );
-                  m_axi_superset_read_rsp_cg.sample( );
+                  // Increment the Read response counter
+                  m_num_rrsp_pkts++;
+                end else begin
+                  // Push back the transaction in the queue, waiting for the
+                  // transaction to be complete before putting it in the
+                  // analysis port
+                  `uvm_info( this.name, $sformatf("READ_RSP_QUEUE=%0s(s)", rrsp.convert2string() ) , UVM_DEBUG)
+                  m_read_rsp_db[rrsp.m_id].push_front(rrsp);
                 end
-                
-                // Send object to the scoreboard
-                m_axi_superset_read_rsp_packets_collected.write(rrsp);
-
-                // Increment the Read response counter
-                m_num_rrsp_pkts++;
 
                 fork
                     begin
@@ -729,6 +643,9 @@ class axi_superset_monitor_c extends uvm_monitor;
         if ( m_queue_write_dat.size() != 0)
           `uvm_error($sformatf("%s%s", this.name, "_REPORT_PHASE"), 
                   $sformatf("REPORT: WRITE_DAT_QUEUE NOT EMPTY SIZE=%0d", m_queue_write_dat.size()))
+        if ( m_read_rsp_db.size() != 0)
+          `uvm_error($sformatf("%s%s", this.name, "_REPORT_PHASE"), 
+                  $sformatf("REPORT: READ_RSP_QUEUE NOT EMPTY SIZE=%0d", m_read_rsp_db.size()))
 
     endfunction: report_phase
 
