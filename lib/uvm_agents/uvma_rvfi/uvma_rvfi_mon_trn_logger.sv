@@ -174,7 +174,26 @@ class uvma_rvfi_mon_trn_logger_c#(int ILEN=DEFAULT_ILEN,
       end
 
       fwrite(instr);
+      
+      // --- CSR update logging ---
+      foreach (t.addr_csrs[addr]) begin
+         uvma_rvfi_csr_seq_item_c csr_trn;
+         string csr_line;
 
+         csr_trn = t.addr_csrs[addr];
+
+         csr_line = $sformatf(
+            "    CSR[0x%0x] old=0x%0x new=0x%0x",
+            csr_trn.csr,
+            csr_trn.addr,
+            csr_trn.rdata,
+            csr_trn.get_csr_retirement_data()
+         );
+
+         fwrite(csr_line);
+      end
+      
+      
    endfunction : write_rvfi_instr
 
    /**
