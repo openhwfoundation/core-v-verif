@@ -232,6 +232,33 @@ interface uvma_obi_memory_if #(
    modport active_slv_mp (clocking drv_slv_cb ); ///< Used by uvma_obi_drv_c in 'slv' mode.
    modport passive_mp    (clocking mon_cb     ); ///< Used by uvma_obi_mon_c.
 
+   //==============================================================================================
+   // Asynchronous Reset Helpers
+   //==============================================================================================
+   function void force_idle_nets(bit is_1p2_or_higher);
+      force req = 1'b0;
+      force gnt = 1'b0;
+      force rvalid = 1'b0;
+      force rready = 1'b0;
+      if (is_1p2_or_higher) begin
+         force reqpar = 1'b1;
+         force gntpar = 1'b1;
+         force rvalidpar = 1'b1;
+         force rreadypar = 1'b1;
+      end
+   endfunction
+
+   function void release_nets();
+      release req;
+      release gnt;
+      release rvalid;
+      release rready;
+      release reqpar;
+      release gntpar;
+      release rvalidpar;
+      release rreadypar;
+   endfunction
+
 endinterface : uvma_obi_memory_if
 
 

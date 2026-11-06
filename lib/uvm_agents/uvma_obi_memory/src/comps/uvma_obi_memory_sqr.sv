@@ -54,6 +54,11 @@ class uvma_obi_memory_sqr_c extends uvm_sequencer#(
     */
    extern virtual function void build_phase(uvm_phase phase);
    
+   /**
+    * Monitors reset to abort sequences.
+    */
+   extern virtual task run_phase(uvm_phase phase);
+   
 endclass : uvma_obi_memory_sqr_c
 
 
@@ -81,6 +86,20 @@ function void uvma_obi_memory_sqr_c::build_phase(uvm_phase phase);
    mon_trn_fifo = new("mon_trn_fifo", this);
    
 endfunction : build_phase
+   
+task uvma_obi_memory_sqr_c::run_phase(uvm_phase phase);
+   super.run_phase(phase);
+   
+   fork
+      forever begin
+         cntxt.reset_asserted_ev.wait_on();
+         `uvm_info("OBI_MEMORY_SQR", "Reset asserted, stopping sequences", UVM_NONE)
+         stop_sequences();
+         cntxt.reset_deasserted_ev.wait_on();
+      end
+   join_none
+   
+endtask : run_phase
 
 
 `endif // __UVMA_OBI_MEMORY_SQR_SV__

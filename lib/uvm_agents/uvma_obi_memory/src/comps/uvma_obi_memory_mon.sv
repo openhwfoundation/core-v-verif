@@ -61,22 +61,19 @@ class uvma_obi_memory_mon_c extends uvm_monitor;
    extern virtual task run_phase(uvm_phase phase);
 
    /**
-    * Monitors passive_mp for asynchronous reset and updates the context's reset state.
+    * Observes vif.reset_n and triggers reset events in cntxt.
+    * This is the single point of physical reset monitoring for the entire agent.
     */
    extern task observe_reset();
 
    /**
-    * TODO Describe uvma_obi_memory_mon_c::mon_chan_a_pre_reset/mon_chan_a_in_reset/mon_chan_a_post_reset()
+    * TODO Describe uvma_obi_memory_mon_c::mon_chan_a_post_reset()
     */
-   extern task mon_chan_a_pre_reset ();
-   extern task mon_chan_a_in_reset  ();
    extern task mon_chan_a_post_reset();
 
    /**
-    * TODO Describe uvma_obi_memory_mon_c::mon_chan_r_pre_reset/mon_chan_r_in_reset/mon_chan_r_post_reset()
+    * TODO Describe uvma_obi_memory_mon_c::mon_chan_r_post_reset()
     */
-   extern task mon_chan_r_pre_reset ();
-   extern task mon_chan_r_in_reset  ();
    extern task mon_chan_r_post_reset();
 
    /**
@@ -142,65 +139,85 @@ task uvma_obi_memory_mon_c::run_phase(uvm_phase phase);
    super.run_phase(phase);
 
    if (cfg.enabled) begin
+      
       fork
-         observe_reset();
-
-         begin : chan_a
+         begin : reset_observer
+            observe_reset();
+         end
+         begin : monitor_isolation_thread
             forever begin
-               case (cntxt.reset_state)
-                  UVMA_OBI_MEMORY_RESET_STATE_PRE_RESET : mon_chan_a_pre_reset ();
-                  UVMA_OBI_MEMORY_RESET_STATE_IN_RESET  : mon_chan_a_in_reset  ();
-                  UVMA_OBI_MEMORY_RESET_STATE_POST_RESET: mon_chan_a_post_reset();
-               endcase
+               // Wait for reset to deassert
+               cntxt.reset_deasserted_ev.wait_on();
+
+               // Run channels in a killable scope to abort mid-transaction on reset
+               fork
+                  begin
+                     
+                     @(passive_mp.mon_cb);
+                     fork
+                        begin : chan_a
+                           forever begin
+                              mon_chan_a_post_reset();
+                           end
+                        end
+
+                        begin : chan_r
+                           forever begin
+                              mon_chan_r_post_reset();
+                           end
+                        end
+                     join
+                  end
+                  begin
+                     // Wait for reset to assert
+                     cntxt.reset_asserted_ev.wait_on();
+                  end
+               join_any
+               disable fork;
+
+               // Flush outstanding transactions on reset
+               cntxt.mon_outstanding_reads_q.delete();
             end
          end
-
-         begin : chan_r
-            forever begin
-               case (cntxt.reset_state)
-                  UVMA_OBI_MEMORY_RESET_STATE_PRE_RESET : mon_chan_r_pre_reset ();
-                  UVMA_OBI_MEMORY_RESET_STATE_IN_RESET  : mon_chan_r_in_reset  ();
-                  UVMA_OBI_MEMORY_RESET_STATE_POST_RESET: mon_chan_r_post_reset();
-               endcase
-            end
-         end
-      join_none
+      join
    end
 
 endtask : run_phase
 
 
+
 task uvma_obi_memory_mon_c::observe_reset();
 
-   forever begin
-      wait (cntxt.vif.reset_n === 0);
-      cntxt.reset_state = UVMA_OBI_MEMORY_RESET_STATE_IN_RESET;
-      `uvm_info("OBI_MEMORY_MON", $sformatf("RESET_STATE_IN_RESET"), UVM_NONE)
-      wait (cntxt.vif.reset_n === 1);
+   // Init state at T=0
+   if (cntxt.vif.reset_n === 1'b1) begin
       cntxt.reset_state = UVMA_OBI_MEMORY_RESET_STATE_POST_RESET;
-      `uvm_info("OBI_MEMORY_MON", $sformatf("RESET_STATE_POST_RESET"), UVM_NONE)
+      cntxt.reset_deasserted_ev.trigger();
+   end else begin
+      cntxt.reset_state = UVMA_OBI_MEMORY_RESET_STATE_IN_RESET;
+      cntxt.reset_asserted_ev.trigger();
+   end
+
+   forever begin
+      wait (cntxt.vif.reset_n !== 1'b1); // Handles X/Z at T=0
+      cntxt.reset_state = UVMA_OBI_MEMORY_RESET_STATE_IN_RESET;
+      cntxt.reset_deasserted_ev.reset(); 
+      cntxt.reset_asserted_ev.trigger(); 
+      `uvm_info("OBI_MEMORY_MON", "reset_n asserted", UVM_NONE)
+
+      wait (cntxt.vif.reset_n === 1'b1);
+      cntxt.reset_state = UVMA_OBI_MEMORY_RESET_STATE_POST_RESET;
+      cntxt.reset_asserted_ev.reset();    
+      cntxt.reset_deasserted_ev.trigger(); 
+      `uvm_info("OBI_MEMORY_MON", "reset_n deasserted", UVM_NONE)
    end
 
 endtask : observe_reset
 
 
-task uvma_obi_memory_mon_c::mon_chan_a_pre_reset();
-
-   @(passive_mp.mon_cb);
-
-endtask : mon_chan_a_pre_reset
-
-
-task uvma_obi_memory_mon_c::mon_chan_a_in_reset();
-
-   @(passive_mp.mon_cb);
-
-endtask : mon_chan_a_in_reset
-
-
 task uvma_obi_memory_mon_c::mon_chan_a_post_reset();
 
    uvma_obi_memory_mon_trn_c  trn;
+
 
    mon_chan_a_trn(trn);
    trn.cfg = cfg;
@@ -219,28 +236,17 @@ task uvma_obi_memory_mon_c::mon_chan_a_post_reset();
 endtask : mon_chan_a_post_reset
 
 
-task uvma_obi_memory_mon_c::mon_chan_r_pre_reset();
-
-   @(passive_mp.mon_cb);
-
-endtask : mon_chan_r_pre_reset
-
-
-task uvma_obi_memory_mon_c::mon_chan_r_in_reset();
-
-   @(passive_mp.mon_cb);
-
-endtask : mon_chan_r_in_reset
-
-
 task uvma_obi_memory_mon_c::mon_chan_r_post_reset();
 
    uvma_obi_memory_mon_trn_c  trn;
 
    wait (cntxt.mon_outstanding_reads_q.size());
-   trn = cntxt.mon_outstanding_reads_q.pop_front();
+   // Peek only. Pop after handshake so reset cleanly drops it via delete()
+   trn = cntxt.mon_outstanding_reads_q[0];
 
    mon_chan_r_trn(trn);
+
+   void'(cntxt.mon_outstanding_reads_q.pop_front());
    trn.cfg = cfg;
    `uvm_info("OBI_MEMORY_MON", $sformatf("monitored transaction on channel R:\n%s", trn.sprint()), UVM_HIGH)
    process_r_trn(trn);
