@@ -22,7 +22,6 @@ module cv32e40s_tb_wrapper
                 BOOT_ADDR         = 'h80,
                 DM_HALTADDRESS    = 32'h1A11_0800,
                 HART_ID           = 32'h0000_0000,
-                IMP_ID            = 32'h0000_0000,
                 // Parameters used by DUT
                 NUM_MHPMCOUNTERS  = 1
     )
@@ -60,8 +59,6 @@ module cv32e40s_tb_wrapper
     // irq signals (not used)
     logic [0:31]                  irq;
     logic [0:4]                   irq_id_in;
-    logic                         irq_ack;
-    logic [0:4]                   irq_id_out;
     logic                         irq_sec;
 
 
@@ -86,10 +83,7 @@ module cv32e40s_tb_wrapper
 //      );
 
     // instantiate the core
-    cv32e40s_core #(
-                 .NUM_MHPMCOUNTERS (NUM_MHPMCOUNTERS)
-                )
-    cv32e40s_core_i
+    cv32e40s_core cv32e40s_core_i
         (
          .clk_i                  ( clk_i                 ),
          .rst_ni                 ( rst_ni                ),
@@ -99,7 +93,6 @@ module cv32e40s_tb_wrapper
          .boot_addr_i            ( BOOT_ADDR             ),
          .dm_halt_addr_i         ( DM_HALTADDRESS        ),
          .mhartid_i              ( HART_ID               ),
-         .mimpid_i               ( IMP_ID                ),
 
          .instr_req_o            ( instr_req             ),
          .instr_gnt_i            ( instr_gnt             ),
@@ -118,8 +111,6 @@ module cv32e40s_tb_wrapper
 
          // Interrupts verified in UVM environment
          .irq_i                  ( {32{1'b0}}            ),
-         .irq_ack_o              ( irq_ack               ),
-         .irq_id_o               ( irq_id_out            ),
 
          .debug_req_i            ( debug_req             ),
 
@@ -153,8 +144,6 @@ module cv32e40s_tb_wrapper
          .data_rvalid_o  ( data_rvalid                               ),
          .data_gnt_o     ( data_gnt                                  ),
 
-         .irq_id_i       ( irq_id_out                                ),
-         .irq_ack_i      ( irq_ack                                   ),
          .irq_o          ( irq                                       ),
 
          .debug_req_o    ( debug_req                                 ),

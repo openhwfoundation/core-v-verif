@@ -60,6 +60,20 @@ SV_CMP_FLAGS =
 CUSTOM_PROG  ?= requested_csr_por
 TEST         ?= hello-world
 
+# Test-Program directories.
+# Relative path is used for Verilator which cannot seem to handle loooong pathnames.
+TEST_PROGRAM_PATH    = $(CORE_V_VERIF)/$(CV_CORE_LC)/tests/programs/custom
+TEST_PROGRAM_RELPATH = ../../tests/programs/custom
+VERI_CUSTOM          = $(TEST_PROGRAM_PATH)
+
+# Common output directories
+RUN_INDEX               ?= 0
+SIM_RESULTS              = simulation_results
+SIM_TEST_RESULTS         = $(SIM_RESULTS)/$(TEST)
+SIM_RUN_RESULTS          = $(SIM_TEST_RESULTS)/$(RUN_INDEX)
+SIM_TEST_PROGRAM_RESULTS = $(SIM_RUN_RESULTS)/test_program
+SIM_BSP_RESULTS          = $(SIM_TEST_PROGRAM_RESULTS)/bsp
+
 ###############################################################################
 # Common Makefiles:
 #  -Variables for RTL and other dependencies (e.g. RISCV-DV)
@@ -465,7 +479,7 @@ testbench_verilator: CV_CORE_pkg $(TBSRC_VERI) $(TBSRC_PKG)
 		-f $(CV_CORE_MANIFEST) \
 		$(CV_CORE_PKG)/bhv/$(CV_CORE_LC)_core_log.sv \
 		$(TBSRC_CORE)/tb_top_verilator.cpp --Mdir $(VERI_OBJ_DIR) \
-		-CFLAGS "-std=gnu++11 $(VERI_CFLAGS)" \
+		-CFLAGS "-std=gnu++14 $(VERI_CFLAGS)" \
 		$(VERI_COMPILE_FLAGS)
 	$(MAKE) -C $(VERI_OBJ_DIR) -f Vtb_top_verilator.mk
 	cp $(VERI_OBJ_DIR)/Vtb_top_verilator testbench_verilator
