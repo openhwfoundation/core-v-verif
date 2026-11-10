@@ -18,7 +18,6 @@ If you are new to git, or unfamiliar with using branches and pull-requests, have
 ## Make your changes below this line.
 Extra marks for creativity and wit.
 
-0000
 ### Madcat
 ```
             /^v^\
