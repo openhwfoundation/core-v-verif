@@ -103,8 +103,12 @@ import "DPI-C" function void spike_put_csr(input longint unsigned proc_id,
             boot_addr = 64'h10000;
         end
 
-        void'(spike_set_param_str("/top/", "isa", rtl_isa));
-        void'(spike_set_param_str(base, "isa", rtl_isa));
+        // Keep the ISA string of the configuration file when there is one:
+        // get_isa_str() only lists the base extensions and a few Z extensions.
+        if (config_file == "") begin
+            void'(spike_set_param_str("/top/", "isa", rtl_isa));
+            void'(spike_set_param_str(base, "isa", rtl_isa));
+        end
         void'(spike_set_param_str("/top/", "priv", rtl_priv));
         void'(spike_set_param_str(base, "priv", rtl_priv));
 
