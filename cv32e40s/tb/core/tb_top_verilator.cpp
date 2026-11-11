@@ -49,7 +49,11 @@ int main(int argc, char **argv, char **env)
 #endif
     top->fetch_enable_i = 1;
     top->clk_i          = 0;
-    top->rst_ni         = 0;
+
+    // Drive reset
+    top->rst_ni = 1;
+    top->eval();
+    top->rst_ni = 0;
 
     top->eval();
     dump_memory();

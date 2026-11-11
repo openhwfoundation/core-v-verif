@@ -48,8 +48,6 @@ module mm_ram
      output logic                         data_rvalid_o,
      output logic                         data_gnt_o,
 
-     input logic [4:0]                    irq_id_i,
-     input logic                          irq_ack_i,
      output logic [IRQ_WIDTH-1:0]         irq_o,
 
      input logic [31:0]                   pc_core_id_i,
@@ -79,6 +77,10 @@ module mm_ram
     localparam int                        MMADDR_TESTSTATUS     = 32'h2000_0000;
     localparam int                        MMADDR_EXIT           = 32'h2000_0004;
     localparam int                        MMADDR_SIGBEGIN       = 32'h2000_0008;
+    // Aliases matching the BSP virtual peripheral addresses (cv32e40s/bsp/corev_uvmt.h)
+    localparam int                        VPADDR_PRINT          = 32'h0080_0000;
+    localparam int                        VPADDR_TESTSTATUS     = 32'h0080_00C0;
+    localparam int                        VPADDR_EXIT           = 32'h0080_00C4;
     localparam int                        MMADDR_SIGEND         = 32'h2000_000C;
     localparam int                        MMADDR_SIGDUMP        = 32'h2000_0010;
     localparam int                        MMADDR_TIMERREG       = 32'h1500_0000;
@@ -324,17 +326,17 @@ module mm_ram
                     data_we_dec    = data_we_i;
                     data_be_dec    = data_be_i;
                     transaction    = T_RAM;
-                end else if (data_addr_i == MMADDR_PRINT) begin
+                end else if (data_addr_i == MMADDR_PRINT || data_addr_i == VPADDR_PRINT) begin
                     print_wdata = data_wdata_i;
                     print_valid = '1;
 
-                end else if (data_addr_i == MMADDR_TESTSTATUS) begin
+                end else if (data_addr_i == MMADDR_TESTSTATUS || data_addr_i == VPADDR_TESTSTATUS) begin
                     if (data_wdata_i == 123456789)
                         tests_passed_o = '1;
                     else if (data_wdata_i == 1)
                         tests_failed_o = '1;
 
-                end else if (data_addr_i == MMADDR_EXIT) begin
+                end else if (data_addr_i == MMADDR_EXIT || data_addr_i == VPADDR_EXIT) begin
                     exit_valid_o = '1;
                     exit_value_o = data_wdata_i;
 
@@ -550,8 +552,6 @@ module mm_ram
           // set/clear irq
           if(timer_cnt_q == 1)
             irq_q <= timer_irq_mask_q ;
-          else if(irq_ack_i)
-            irq_q[irq_id_i] <= 1'b0;
 
         end // else: !if(~rst_ni)
     end // block: tb_irq_timer
@@ -848,7 +848,7 @@ module mm_ram
       .clk_i             ( clk_i                                        ),
       .irq_i             ( 1'b0                                         ),
       .irq_id_i          ( '0                                           ),
-      .irq_ack_i         ( irq_ack_i == 1'b1 && irq_id_i == RND_IRQ_ID  ),
+      .irq_ack_i         ( '0                                           ),
       .irq_ack_o         (                                              ),
       .irq_o             ( rnd_irq                                      ),
       .irq_id_o          ( /*disconnected, always generate RND_IRQ_ID*/ ),
