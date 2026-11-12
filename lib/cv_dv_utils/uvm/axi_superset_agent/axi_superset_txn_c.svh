@@ -1,22 +1,19 @@
 // ----------------------------------------------------------------------------
-// Copyright 2023 CEA*
-// *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
+//Copyright 2023 CEA*
+//*Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
 //
-// SPDX-License-Identifier: Apache-2.0
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+//Licensed under the Apache License, Version 2.0 (the "License");
+//you may not use this file except in compliance with the License.
+//You may obtain a copy of the License at
 //
 //    http://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+//Unless required by applicable law or agreed to in writing, software
+//distributed under the License is distributed on an "AS IS" BASIS,
+//WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//See the License for the specific language governing permissions and
+//limitations under the License.
 //[END OF HEADER]
-// ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 //  Description : First set of the AXI superset transaction
@@ -179,6 +176,14 @@ class axi_superset_txn_c extends uvm_sequence_item;
     // Memory type for the m_cache encoding
     rand axi_dv_mem_type_t     m_mem_type     ;
 
+    // Internal fields to store the addr, lower byte / upper byte / wrap
+    // boundary.
+    // Can serve for debug purpose on master side, or to have the necessary
+    // value to write in the memory for each flit on slave side.
+    rand axi_sig_addr_t        m_flit_addr[$] ;
+    rand int unsigned          m_flit_lower_byte_lane[$];
+    rand int unsigned          m_flit_upper_byte_lane[$];
+
     // Channel delay fields
     rand int unsigned          m_delay_cycle_chan_X   ; // Delay before driving the transaction on the AW/AR/B/R channels
     rand int unsigned          m_delay_cycle_chan_W   ; // Delay before driving the transaction on the W channel
@@ -239,6 +244,9 @@ class axi_superset_txn_c extends uvm_sequence_item;
         `uvm_field_int        (                     m_delay_cycle_chan_X , UVM_DEFAULT | UVM_NOCOMPARE)
         `uvm_field_int        (                     m_delay_cycle_chan_W , UVM_DEFAULT | UVM_NOCOMPARE)
         `uvm_field_queue_int  (                     m_delay_cycle_flits  , UVM_DEFAULT | UVM_NOCOMPARE)
+        `uvm_field_queue_int  (                     m_flit_addr          , UVM_DEFAULT | UVM_NOCOMPARE)
+        `uvm_field_queue_int  (                     m_flit_upper_byte_lane , UVM_DEFAULT | UVM_NOCOMPARE)
+        `uvm_field_queue_int  (                     m_flit_lower_byte_lane , UVM_DEFAULT | UVM_NOCOMPARE)
         `uvm_field_queue_int  (                     m_timestamp          , UVM_DEFAULT | UVM_NOCOMPARE)
     `uvm_object_utils_end
 
@@ -273,6 +281,10 @@ class axi_superset_txn_c extends uvm_sequence_item;
     constraint c_resp_length      { m_resp.size()              == m_len + 1 ; }
     constraint c_delay_flits      { m_delay_cycle_flits.size() == m_len + 1 ; }
 
+    constraint c_flits_addr       { m_flit_addr.size()            == m_len + 1 ; }
+    constraint c_flits_lb         { m_flit_lower_byte_lane.size() == m_len + 1 ; }
+    constraint c_flits_up         { m_flit_upper_byte_lane.size() == m_len + 1 ; }
+
     // Constraint to force each last flit to be set to 0, apart from the
     // last one which is set to 1, to follow the AXI protocol.
     constraint c_last
@@ -293,11 +305,17 @@ class axi_superset_txn_c extends uvm_sequence_item;
       m_atop_type inside { ATOP_STORE, ATOP_LOAD, ATOP_SWAP} -> ( m_burst == INCR );
     }
 
-    // Constraint for the burst type: only the INCR mode is supported
-    // currently
-    constraint c_burst_incr { m_burst == INCR ; }
-    constraint c_prot       { m_prot == UNPRIVILEGED_SECURE_DATA_ACCESS ; }
+    // Constraint for the burst type
+    constraint c_burst_reserved { m_burst != RESERVED ; }
+    constraint c_burst_wrap_aligned { ( m_burst == WRAP  ) -> ( m_addr == m_addr + m_addr % ( 2**m_size ) ) ; }
+    constraint c_burst_wrap_length  { ( m_burst == WRAP  ) -> 
+                                      ( ( m_len + 1 == 2  ) ||
+                                        ( m_len + 1 == 4  ) ||
+                                        ( m_len + 1 == 8  ) ||
+                                        ( m_len + 1 == 16 ) ) ;
+                                    }
 
+    // Misc constraint
     constraint c_X_delay    { m_delay_cycle_chan_X <= m_txn_config.get_max_delay_cycles() ; }
     constraint c_mem_type   { m_mem_type != CACHE_RESERVED ; }
 
@@ -333,6 +351,9 @@ class axi_superset_txn_c extends uvm_sequence_item;
     constraint c_AR_cache_value { ( m_txn_type == AXI_READ_REQ ) -> ( m_cache == get_cache_value( AXI_READ_REQ, m_mem_type ) ) ; }
 
     // R channel
+    // Arbitrary upper bound delay
+    constraint c_R_flits_delay
+    { foreach( m_delay_cycle_flits[i] ) { ( m_txn_type == AXI_READ_RSP ) -> ( m_delay_cycle_flits[i] <= m_txn_config.get_max_delay_cycles() ) ; } }
 
     // Version constraints
     constraint c_axi4_version
@@ -364,33 +385,64 @@ class axi_superset_txn_c extends uvm_sequence_item;
     // Exclusive accesses and ATOPs are non-modifiable transactions
     // cf. section A4.3.1 of AXI specifications
     constraint c_non_modifiable_txns
-    { (m_lock == EXCLUSIVE) || (m_atop_type != ATOP_NONE) -> (m_mem_type inside { DEVICE_NON_BUFFERABLE , DEVICE_BUFFERABLE } ) ; }
+    { ( m_atop_type != ATOP_NONE ) -> (m_mem_type inside { DEVICE_NON_BUFFERABLE , DEVICE_BUFFERABLE } ) ; }
 
     // ------------------------------------------------------------------------
     // Exclusive access restrictions (Section A7.2.4)
-    // The number of bytes to be transferred in an exclusive access burst must be a power of 2,
-    // that is, 1, 2, 4, 8, 16, 32, 64, or 128 bytes.
-    // The burst length for an exclusive access must not exceed 16 transfers.
     // ------------------------------------------------------------------------
-    constraint c_excl_txns
+    constraint c_excl_addr
+    { 
+      ( m_lock == EXCLUSIVE ) ->
+      ( m_addr == m_addr + m_addr % ( ( m_len + 1 ) * ( 2**m_size ) ) ) ;
+    }
+    constraint c_excl_len
     {
-      (m_lock == EXCLUSIVE) ->
-      ( (m_len <= 15) && ( $clog2(get_total_number_of_bytes_exchanged()) inside {[0:7]} ) );
+      ( m_lock == EXCLUSIVE ) -> ( m_len + 1 <= 15 ) ;
+    }
+    constraint c_excl_tot_nb_byte_exchanged
+    {
+      ( m_lock == EXCLUSIVE ) -> ( ( m_len + 1 ) * ( 2**m_size ) <= 128 ) ;
+    }
+    constraint c_excl_nb_byte_exchanged
+    { ( m_lock == EXCLUSIVE ) ->
+      ( ( ( m_len + 1 ) * ( 2**m_size ) == 1   ) ||
+        ( ( m_len + 1 ) * ( 2**m_size ) == 2   ) ||
+        ( ( m_len + 1 ) * ( 2**m_size ) == 4   ) ||
+        ( ( m_len + 1 ) * ( 2**m_size ) == 8   ) ||
+        ( ( m_len + 1 ) * ( 2**m_size ) == 16  ) ||
+        ( ( m_len + 1 ) * ( 2**m_size ) == 32  ) ||
+        ( ( m_len + 1 ) * ( 2**m_size ) == 64  ) ||
+        ( ( m_len + 1 ) * ( 2**m_size ) == 128 ) ) ;
+    }
+    constraint c_excl_mem_type
+    { ( m_lock == EXCLUSIVE ) ->
+      ( m_mem_type inside { DEVICE_BUFFERABLE,
+                            NORMAL_NON_CACHEABLE_NON_BUFFERABLE,
+                            NORMAL_NON_CACHEABLE_BUFFERABLE,
+                            WRITE_THROUGH_NO_ALLOCATE,
+                            WRITE_THROUGH_READ_ALLOCATE,
+                            WRITE_THROUGH_WRITE_ALLOCATE,
+                            WRITE_THROUGH_READ_AND_WRITE_ALLOCATE }
+      ) ;
     }
 
     // ------------------------------------------------------------------------
     // Ordering constraints
     // ------------------------------------------------------------------------
     constraint c_atop_type_before_atop  { solve m_atop_type       before m_atop     ; }
-    constraint c_atop_type_before_cache { solve m_atop_type       before m_mem_type    ; }
-    constraint c_lock_before_cache      { solve m_lock            before m_mem_type    ; }
+    constraint c_atop_type_before_cache { solve m_atop_type       before m_mem_type ; }
+    constraint c_lock_before_cache      { solve m_lock            before m_mem_type ; }
     constraint c_atop_type_before_lock  { solve m_atop_type       before m_lock     ; }
     constraint c_endianness_before_atop { solve m_atop_endianness before m_atop     ; }
     constraint c_version_before_type    { solve m_axi_version     before m_txn_type ; }
     constraint c_version_before_lite    { solve m_axi_version     before m_lite     ; }
     constraint c_lite_before_err        { solve m_lite            before m_err      ; }
     constraint c_size_before_wstrb      { solve m_size            before m_wstrb    ; }
-    constraint c_type_before_len        { solve m_txn_type        before m_len      ; }
+    constraint c_type_before_burst      { solve m_txn_type        before m_burst    ; }
+    constraint c_burst_before_len       { solve m_burst           before m_len      ; }
+    constraint c_burst_before_addr      { solve m_burst           before m_addr     ; }
+    constraint c_lock_before_size       { solve m_lock            before m_size     ; }
+    constraint c_lock_before_len        { solve m_lock            before m_len      ; }
 
     constraint c_len_before_data        { solve m_len before m_data              ; }
     constraint c_len_before_last        { solve m_len before m_last              ; }
@@ -431,38 +483,77 @@ class axi_superset_txn_c extends uvm_sequence_item;
     endfunction : pre_randomize
 
     function void post_randomize();
-      int bus_nbytes, nb_bytes ;
-      int lower_byte_lane, upper_byte_lane ;
+      int unsigned bus_nbytes, nb_bytes ;
+      int unsigned lower_byte_lane, upper_byte_lane ;
       axi_sig_addr_t aligned_addr, address_n ;
+      axi_sig_addr_t wrap_boundary ; 
 
       super.post_randomize();
 
       // Using the equation of the specification, section A3.4 of the IHI022H
       // version of the amba axi protocol to regenerate a valid write strobe
       // for the transaction
-      if ( m_txn_type == AXI_WRITE_REQ ) begin
-        foreach ( m_wstrb[i] ) begin
-          logic flag ; // Flag which is only used for debug purpose: if there is a problem in the write strobe generation, an error is printed
+      // Computing some variables
+      bus_nbytes    = m_txn_config.get_data_width() / 8;
+      nb_bytes      = 2**m_size ;
+      aligned_addr  = axi_sig_addr_t'( m_addr / nb_bytes ) * nb_bytes ;
+      wrap_boundary = axi_sig_addr_t'( m_addr / ( nb_bytes * ( m_len + 1 ) ) ) * ( nb_bytes * ( m_len + 1 ) ) ;
 
-          // Computing some variables
-          bus_nbytes   = m_txn_config.get_data_width() / 8;
-          nb_bytes     = 2**m_size ;
-          aligned_addr = int'( m_addr / nb_bytes ) * nb_bytes ;
+      if ( m_txn_type == AXI_WRITE_REQ ) begin
+        logic flag_wrap = 0 ; // Flag to determine when the address has wrapped, if BURST_TYPE == WRAP
+        foreach ( m_wstrb[i] ) begin
+          logic flag_error ; // Flag which is only used for debug purpose: if there is a problem in the write strobe generation, an error is printed
 
           // Equation from the specification
-          if ( i == 0 ) begin
-            address_n       = m_addr ;
+          if ( m_burst != FIXED ) begin // Burst mode INCR or WRAP
+
+            // Computing the address and byte lane for the first flit of the
+            // transaction
+            if ( i == 0 ) begin
+              address_n       = m_addr ;
+              lower_byte_lane = m_addr - int'( m_addr / bus_nbytes ) * bus_nbytes;
+              upper_byte_lane = aligned_addr + ( nb_bytes - 1 ) - int'( m_addr / bus_nbytes ) * bus_nbytes ;
+            end else begin
+              // Computing the flit address depending of the burst mode, and
+              // if the transaction has wrapped or not.
+              if ( ( m_burst == WRAP ) && flag_wrap ) begin // If burst mode is WRAP and the transaction has already wrapped
+                address_n = m_addr + ( i * nb_bytes ) - ( nb_bytes * ( m_len + 1 ) ) ;
+              end else begin // For burst mode INCR, and WRAP if the transaction has not wrapped
+                address_n = aligned_addr + i * nb_bytes;
+              end
+
+              // Computing the byte lane
+              lower_byte_lane = address_n - int'( address_n / bus_nbytes ) * bus_nbytes;
+              upper_byte_lane = lower_byte_lane + nb_bytes - 1;
+            end
+
+            // Checking for the burst mode WRAP if the address has wrapped
+            if ( address_n == ( wrap_boundary + ( nb_bytes * ( m_len + 1 ) ) ) ) begin
+              flag_wrap = 1 ;
+              address_n = wrap_boundary ;
+
+              // Computing the byte lane again since address_n has been
+              // changed
+              lower_byte_lane = address_n - int'( address_n / bus_nbytes ) * bus_nbytes;
+              upper_byte_lane = lower_byte_lane + nb_bytes - 1;
+            end // if wrap
+
+          end else begin // Burst mode FIXED
+            // Constant addr and byte lane for all flits of the transaction
+            address_n = m_addr ;
             lower_byte_lane = m_addr - int'( m_addr / bus_nbytes ) * bus_nbytes;
             upper_byte_lane = aligned_addr + ( nb_bytes - 1 ) - int'( m_addr / bus_nbytes ) * bus_nbytes ;
-          end else begin
-            address_n       = aligned_addr + i * nb_bytes;
-            lower_byte_lane = address_n - int'( address_n / bus_nbytes ) * bus_nbytes;
-            upper_byte_lane = lower_byte_lane + nb_bytes - 1;
-          end
+          end // if FIXED
+
+          // Filling the lower byte / upper byte / flit addr queue for the
+          // corresponding flit
+          m_flit_addr[i]            = address_n       ;
+          m_flit_lower_byte_lane[i] = lower_byte_lane ;
+          m_flit_upper_byte_lane[i] = upper_byte_lane ;
 
           // Cleaning the write strobe, to re randomize it bit by bit
           m_wstrb[i] = 'h0 ;
-          flag = 1;
+          flag_error = 1;
           for ( int j = 0 ; j < bus_nbytes ; j++ ) begin
             if ( ( j <= upper_byte_lane ) && ( j >= lower_byte_lane ) ) begin
               logic strb;
@@ -470,10 +561,10 @@ class axi_superset_txn_c extends uvm_sequence_item;
                 `uvm_error(this.name,"Randomizing strb error")
               m_wstrb[i][j] = strb ;
             end
-            flag = 0;
+            flag_error = 0;
           end
 
-          if ( flag )
+          if ( flag_error )
             `uvm_error(this.name,"Not entered the wstrb loop: error of byte lane computing")
         end
       end
@@ -482,13 +573,9 @@ class axi_superset_txn_c extends uvm_sequence_item;
         `uvm_fatal("UNSUPPORTED_ERROR_MODE",
           $sformatf("The error mode %0p is not supported by this agent. Only the error mode NO_ERR is supported by this agent currently",m_err) )
 
-      if ( m_burst != INCR )
+      if ( m_burst == RESERVED )
         `uvm_fatal("UNSUPPORTED_BURST_MODE", 
-          $sformatf("The burst mode %0p is not supported by this agent. Only the burst mode INCR is supported by this agent currently", m_burst) )
-
-      if ( m_prot != UNPRIVILEGED_SECURE_DATA_ACCESS )
-        `uvm_fatal("UNSUPPORTED_PROT_MODE", 
-          $sformatf("The prot mode %0p is not supported by this agent. Only the burst mode UNPRIVILEGED_SECURE_DATA_ACCESS is supported by this agent currently", m_prot) )
+          $sformatf("The burst mode RESERVED is not supported by this agent. ") )
 
     endfunction : post_randomize
 
@@ -504,7 +591,7 @@ class axi_superset_txn_c extends uvm_sequence_item;
     // transaction.
     // ------------------------------------------------------------------------
     function int get_total_number_of_bytes_exchanged();
-      get_total_number_of_bytes_exchanged = ( m_len + 1 ) * ( 2**m_size ) ;
+      return ( ( this.m_len + 1 ) * ( 2**this.m_size ) ) ;
     endfunction : get_total_number_of_bytes_exchanged
 
     // ------------------------------------------------------------------------
@@ -578,13 +665,22 @@ class axi_superset_txn_c extends uvm_sequence_item;
                 array = "";
                 foreach( m_wstrb[i] ) array = $sformatf("%0s%0h ", array, m_wstrb[i]);
                 s = $sformatf("%0s, WSTRB=%0s(h)", s , array);
+                array = "";
+                foreach( m_flit_addr[i] ) array = $sformatf("%0s%0h ", array, m_flit_addr[i]);
+                s = $sformatf("%0s, FLIT_ADDR=%0s(h)", s , array);
+                array = "";
+                foreach( m_flit_upper_byte_lane[i] ) array = $sformatf("%0s%0h ", array, m_flit_upper_byte_lane[i]);
+                s = $sformatf("%0s, FLIT_UPPER_BYTE_LANE=%0s(h)", s , array);
+                array = "";
+                foreach( m_flit_lower_byte_lane[i] ) array = $sformatf("%0s%0h ", array, m_flit_lower_byte_lane[i]);
+                s = $sformatf("%0s, FLIT_LOWER_BYTE_LANE=%0s(h)", s , array);
             end
             s = $sformatf("%0s, LAST=%0p(p)", s , m_last);
         end
         if ( ( m_txn_type == AXI_WRITE_RSP ) || ( m_txn_type == AXI_READ_RSP ) ) begin
             array = "";
-            foreach( m_resp[i] ) array = $sformatf("%0s%0h ", array, m_resp[i]);
-            s = $sformatf("%0s, RESP=%0s(h)", s , array);
+            foreach( m_resp[i] ) array = $sformatf("%0s%0p ", array, m_resp[i]);
+            s = $sformatf("%0s, RESP=%0s(p)", s , array);
         end
 
         if ( m_axi_version == AXI5 ) begin

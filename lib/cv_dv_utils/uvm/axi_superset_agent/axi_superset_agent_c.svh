@@ -1,22 +1,19 @@
 // ----------------------------------------------------------------------------
-// Copyright 2023 CEA*
-// *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
+//Copyright 2023 CEA*
+//*Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
 //
-// SPDX-License-Identifier: Apache-2.0
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+//Licensed under the Apache License, Version 2.0 (the "License");
+//you may not use this file except in compliance with the License.
+//You may obtain a copy of the License at
 //
 //    http://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+//Unless required by applicable law or agreed to in writing, software
+//distributed under the License is distributed on an "AS IS" BASIS,
+//WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//See the License for the specific language governing permissions and
+//limitations under the License.
 //[END OF HEADER]
-// ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 //  Description : This holds a UVM agent for the axi interface. This is
@@ -121,7 +118,14 @@ class axi_superset_agent_c extends uvm_agent;
     function void connect_phase(uvm_phase phase);
         if ( is_active == UVM_ACTIVE ) begin
             m_driver.seq_item_port.connect(m_sequencer.seq_item_export);
-            m_driver.rsp_port.connect(m_sequencer.rsp_export);
+
+            if ( m_agent_config.get_is_master_side() ) begin
+              m_driver.rsp_port.connect(m_sequencer.rsp_export);
+            end else begin // Slave side
+              // Connecting the monitor to the sequencer
+              m_monitor.m_axi_superset_mon2seq_packets_collected.connect( m_sequencer.m_mon2seq_export.analysis_export ) ;
+            end
+
             `uvm_info( "CONNECT", "Connect stage complete.", UVM_MEDIUM );
         end // if
 
