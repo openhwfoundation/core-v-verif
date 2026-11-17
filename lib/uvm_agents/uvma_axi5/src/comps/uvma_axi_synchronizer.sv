@@ -350,7 +350,12 @@ task uvma_axi_synchronizer_c::write_data();
       for(int j = 0; j < w_trs_queue[i].size(); j++) begin
 
          if(w_trs_queue[i][j].m_trs_status == ADDR_DATA_COMPLETE) begin
-            if(exclusive_addr[w_trs_queue[i][j].m_addr] == 1) exclusive_addr[w_trs_queue[i][j].m_addr] = -1;
+            //  Exclusive access monitor (AXI A7.2.3): an exclusive read reserves its address
+            //  (exclusive_addr = 1); a later plain write to that address breaks the
+            //  reservation (-1); an exclusive write succeeds only if the reservation is
+            //  still held, and releases it (0).
+            if(w_trs_queue[i][j].m_lock == 0 && w_trs_queue[i][j].m_atop == 0 &&
+               exclusive_addr[w_trs_queue[i][j].m_addr] == 1) exclusive_addr[w_trs_queue[i][j].m_addr] = -1;
             if(w_trs_queue[i][j].m_lock == 1 && cfg.axi_lock_enabled) begin
 
                `uvm_info(get_type_name(), $sformatf("EXCLUSIVE ACCESS"), UVM_HIGH)
@@ -392,6 +397,7 @@ task uvma_axi_synchronizer_c::write_data();
                end else begin
                   exclusive_w_access[w_trs_queue[i][j].m_id][exclusive_w_access[w_trs_queue[i][j].m_id].size()-1].m_resp.push_back(0);
                end
+               exclusive_addr[w_trs_queue[i][j].m_addr] = 0;
                last_trs = -1;
             end else begin
                `uvm_info(get_type_name(), $sformatf("NORMAL ACCESS"), UVM_HIGH)
