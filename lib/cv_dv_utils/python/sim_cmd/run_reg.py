@@ -71,7 +71,7 @@ if args.nthreads == None:
     args.nthreads = 1
 
 
-def rtest(yaml_file, test, seed, soft=None):
+def rtest(yaml_file, test, seed, sim_opt=None):
     run_cmd = f"python3 {scripts_dir}/run_test.py --yaml {yaml_file} --test_name {test} --seed {seed} --debug UVM_NONE --dump 0 --stdout 0 --outdir {outdir} --cover {cover}"
     if sim_opt:
        run_cmd += f" --sim_opt '{sim_opt}'"
@@ -131,7 +131,7 @@ else:
     if not line or line[0].startswith("#"):
         continue
 
-    sim_opt = line[2] if len(line) > 2 else ""
+    sim_opt = line[2] if len(line) > 2 and not line[2].startswith("#") else ""
 
     for y in range(0, int(line[1])):
         seed = random.getrandbits(31)
