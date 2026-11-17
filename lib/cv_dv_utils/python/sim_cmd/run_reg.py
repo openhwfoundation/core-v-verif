@@ -71,8 +71,10 @@ if args.nthreads == None:
     args.nthreads = 1
 
 
-def rtest(yaml_file, test, seed):
+def rtest(yaml_file, test, seed, sim_opt=None):
     run_cmd = f"python3 {scripts_dir}/run_test.py --yaml {yaml_file} --test_name {test} --seed {seed} --debug UVM_NONE --dump 0 --stdout 0 --outdir {outdir} --cover {cover}"
+    if sim_opt:
+       run_cmd += f" --sim_opt '{sim_opt}'"
     if verbose: print("[INFO] Simulation command:\n{}".format(run_cmd))
     os.system(run_cmd)
     log = "{}/{}_{}.log".format(outdir, test, seed) 
@@ -122,24 +124,27 @@ if args.reglist == None:
     print("[ERROR] Please provide a Regression List")
 else:
   tq = queue.Queue()
-  sq = queue.Queue()
-  
+
   f = open(args.reglist, "r")
   for x in f:
-    line = x.split(" ")
+    line = x.split()
+    if not line or line[0].startswith("#"):
+        continue
+
+    sim_opt = line[2] if len(line) > 2 and not line[2].startswith("#") else ""
+
     for y in range(0, int(line[1])):
         seed = random.getrandbits(31)
-        sq.put(seed)
-        tq.put(line[0])
+        tq.put((line[0], seed, sim_opt))
+
 
   threads = []
   while (not tq.empty()):
       if threading.active_count() <= args.nthreads:
-        seed = sq.get()
-        test = tq.get()
+        test, seed, sim_opt = tq.get()
         st = datetime.datetime.now()
         print("running", test, "seed", seed, "start time", st.strftime("%Y-%m-%d %H:%M:%S"))
-        t = threading.Thread(target=rtest, args=(args.yaml_file, test, seed))
+        t = threading.Thread(target=rtest, args=(args.yaml_file, test, seed, sim_opt))
         t.start()
         threads.append(t)
       # os.system("scan_logs.pl -nopreresetwarn {}/{}_{}.log".format(args.outdir, line[0], seed))

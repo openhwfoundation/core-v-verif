@@ -69,6 +69,7 @@ python3 run_test.py --yaml yaml_file.yaml --test_name name_of_the_test --seed n_
 | `--stdout` | `1`: print log to stdout; `0`: redirect to log file | `1` |
 | `--outdir` | Output directory for logs and databases | `output` |
 | `--run_time` | Simulation run time (e.g. `100ns`) | `-all` |
+| `--sim_opt` | Additional simulator runtime options forwarded to QuestaSim (e.g. +SOFT=abc.bin) | "" |
 | `--verbose` | Print informational messages | `False` |
 
 ## Running a regression
@@ -91,6 +92,69 @@ python3 run_reg.py --yaml yaml_file.yaml --reg_list reg_list_file [--nthreads n]
 | `--cover_report` | `1`: generate an HTML report from the merged UCDB after merging (requires `--cover_merge 1`) | `0` |
 | `--define` | Additional `+define+<MACRO>`, forwarded to `compile.py`, repeatable | none || `--outdir` | Output directory | `regression` |
 | `--verbose` | Print informational messages | `False` |
+
+## Regression Test List Format
+
+The regression test list defines the tests to execute, the number of seeds for each test, and optional simulator runtime options.
+
+### Format
+
+Each line follows this format:
+
+```text
+<test_name> <number_of_seeds> [sim_options]
+```
+
+- `test_name`: Name of the UVM test to execute.
+- `number_of_seeds`: Number of simulation runs with different random seeds.
+- `sim_options` (optional): Additional simulator runtime options forwarded to `run_test.py` and QuestaSim.
+
+### Examples
+
+```text
+# Test name       Number of seeds    Simulator options
+
+test_smoke         2
+test_alu           5
+test_boot          3                   +SOFT=abc.bin
+test_application   2                   +SOFT=firmware.elf
+test_debug         1                   +DEBUG=1
+```
+
+### Simulator Options
+
+The optional third field allows additional runtime options to be passed to the simulator without modifying the YAML configuration or recompiling the design.
+
+For example:
+
+```text
+test_boot 3 +SOFT=abc.bin
+```
+
+The regression script forwards the option to `run_test.py` using `--sim_opt`, which appends it to the existing simulator options.
+
+The resulting QuestaSim command includes:
+
+```bash
+vsim ... +SOFT=abc.bin ...
+```
+
+Multiple simulator options can also be specified:
+
+```text
+test_boot 3 "+SOFT=abc.bin +DEBUG=1"
+```
+
+### Compatibility
+
+- The third field is optional.
+- Existing regression lists containing only the test name and number of seeds remain compatible.
+- Each test can use different simulator options.
+- If no simulator options are specified, the default YAML simulation options are used.
+
+### Comments
+
+Lines starting with `#` and empty lines are ignored.
 
 ## Coverage (Questasim only)
 
