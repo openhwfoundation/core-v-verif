@@ -45,7 +45,6 @@ class uvma_debug_mon_trn_c extends uvml_trn_mon_trn_c;
 endclass : uvma_debug_mon_trn_c
 
 
-`pragma protect begin
 
 
 function uvma_debug_mon_trn_c::new(string name="uvma_debug_mon_trn");
@@ -55,7 +54,6 @@ function uvma_debug_mon_trn_c::new(string name="uvma_debug_mon_trn");
 endfunction : new
 
 
-`pragma protect end
 
 
 `endif // __UVMA_DEBUG_MON_TRN_SV__

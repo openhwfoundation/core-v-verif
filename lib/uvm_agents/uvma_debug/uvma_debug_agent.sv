@@ -108,7 +108,6 @@ class uvma_debug_agent_c extends uvm_agent;
 endclass : uvma_debug_agent_c
 
 
-`pragma protect begin
 
 
 function uvma_debug_agent_c::new(string name="uvma_debug_agent", uvm_component parent=null);
@@ -229,7 +228,6 @@ function void uvma_debug_agent_c::connect_trn_loggers();
 endfunction : connect_trn_loggers
 
 
-`pragma protect end
 
 
 `endif // __UVMA_DEBUG_AGENT_SV__

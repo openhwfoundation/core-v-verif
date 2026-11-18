@@ -83,7 +83,6 @@ class uvma_debug_mon_c extends uvm_monitor;
 endclass : uvma_debug_mon_c
 
 
-`pragma protect begin
 
 
 function uvma_debug_mon_c::new(string name="uvma_debug_mon", uvm_component parent=null);
@@ -192,7 +191,6 @@ function void uvma_debug_mon_c::process_trn(ref uvma_debug_mon_trn_c trn);
 endfunction : process_trn
 
 
-`pragma protect end
 
 
 `endif // __UVMA_DEBUG_MON_SV__
