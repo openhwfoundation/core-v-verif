@@ -55,19 +55,23 @@ module cv32e40x_tb_wrapper
     logic                         debug_req;
 
     // irq signals (not used)
-    logic [0:31]                  irq;
-    logic [0:4]                   irq_id_in;
+    logic [31:0]                  irq;
     logic                         irq_ack;
-    logic [0:4]                   irq_id_out;
+    logic [4:0]                   irq_id_out;
     logic                         irq_sec;
+    logic                         core_sleep_o;
 
 
     // interrupts (only timer for now)
     assign irq_sec     = '0;
 
-   // eXtension Interface
-    if_xif #(
+    assign irq_ack    = cv32e40x_core_i.irq_ack;
+    assign irq_id_out = cv32e40x_core_i.irq_id[4:0];
+
+     // eXtension Interface
+    cv32e40x_if_xif #(
         .X_NUM_RS    ( 2  ),
+      .X_ID_WIDTH  ( 4  ),
         .X_MEM_WIDTH ( 32 ),
         .X_RFR_WIDTH ( 32 ),
         .X_RFW_WIDTH ( 32 ),
@@ -92,9 +96,8 @@ module cv32e40x_tb_wrapper
          .mtvec_addr_i           ( '0                    ), // TODO
          .dm_halt_addr_i         ( DM_HALTADDRESS        ),
          .mhartid_i              ( HART_ID               ),
-         .mimpid_i               ( IMP_ID                ),
+         .mimpid_patch_i         ( IMP_ID[3:0]           ),
          .dm_exception_addr_i    ( '0                    ), // TODO
-         .nmi_addr_i             ( '0                    ), // TODO
 
          // Instruction memory interface
          .instr_req_o            ( instr_req             ),
@@ -114,15 +117,20 @@ module cv32e40x_tb_wrapper
          .data_we_o              ( data_we               ),
          .data_be_o              ( data_be               ),
          .data_addr_o            ( data_addr             ),
+         .data_wdata_o           ( data_wdata            ),
          .data_memtype_o         (                       ), // TODO: should the core tb check this?
          .data_prot_o            (                       ), // TODO: should the core tb check this?
          .data_dbg_o             (                       ), // TODO
+         .data_rdata_i           ( data_rdata            ),
          .data_err_i             ( 1'b0                  ),
          .data_atop_o            (                       ),
          .data_exokay_i          ( 1'b1                  ),
 
          // Cycle Count
          .mcycle_o               (                       ), // TODO
+
+         // Time input
+         .time_i                 ( 64'b0                 ),
 
          // eXtension interface
          .xif_compressed_if      ( ext_if                ),
@@ -133,16 +141,16 @@ module cv32e40x_tb_wrapper
          .xif_result_if          ( ext_if                ),
 
          // Interrupts
-         .irq_i                  ( {32{1'b0}}            ),
+         .irq_i                  ( irq                   ),
+
+         // Event wakeup signals
+         .wu_wfe_i               ( 1'b0                  ),
 
          .clic_irq_i             (  1'b0                 ), // TODO
-         .clic_irq_id_i          ( 12'h0                 ), // TODO
-         .clic_irq_il_i          (  8'h0                 ), // TODO
+         .clic_irq_id_i          (  5'h0                 ), // TODO
+         .clic_irq_level_i       (  8'h0                 ), // TODO
          .clic_irq_priv_i        (  2'h0                 ), // TODO
-         .clic_irq_hv_i          (  1'b0                 ), // TODO
-         .clic_irq_id_o          (                       ), // TODO
-         .clic_irq_mode_o        (                       ),
-         .clic_irq_exit_o        (                       ),
+         .clic_irq_shv_i         (  1'b0                 ), // TODO
 
 
          
@@ -154,6 +162,8 @@ module cv32e40x_tb_wrapper
          .debug_havereset_o      (                       ),
          .debug_running_o        (                       ),
          .debug_halted_o         (                       ),
+         .debug_pc_valid_o       (                       ),
+         .debug_pc_o             (                       ),
 
          // CPU Control Signals
          .fetch_enable_i         ( fetch_enable_i        ),

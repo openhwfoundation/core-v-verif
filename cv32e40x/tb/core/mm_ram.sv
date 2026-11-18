@@ -81,6 +81,15 @@ module mm_ram
     localparam int                        MMADDR_SIGBEGIN       = 32'h2000_0008;
     localparam int                        MMADDR_SIGEND         = 32'h2000_000C;
     localparam int                        MMADDR_SIGDUMP        = 32'h2000_0010;
+    localparam int                        UVMT_MMADDR_PRINT     = 32'h0080_0000;
+    localparam int                        UVMT_MMADDR_RNDNUM    = 32'h0080_0040;
+    localparam int                        UVMT_MMADDR_TICKS     = 32'h0080_0080;
+    localparam int                        UVMT_MMADDR_TICKS_PRINT = 32'h0080_0084;
+    localparam int                        UVMT_MMADDR_TESTSTATUS = 32'h0080_00C0;
+    localparam int                        UVMT_MMADDR_EXIT      = 32'h0080_00C4;
+    localparam int                        UVMT_MMADDR_TIMERREG  = 32'h0080_0140;
+    localparam int                        UVMT_MMADDR_TIMERVAL  = 32'h0080_0144;
+    localparam int                        UVMT_MMADDR_DBG       = 32'h0080_0180;
     localparam int                        MMADDR_TIMERREG       = 32'h1500_0000;
     localparam int                        MMADDR_TIMERVAL       = 32'h1500_0004;
     localparam int                        MMADDR_DBG            = 32'h1500_0008;
@@ -324,17 +333,17 @@ module mm_ram
                     data_we_dec    = data_we_i;
                     data_be_dec    = data_be_i;
                     transaction    = T_RAM;
-                end else if (data_addr_i == MMADDR_PRINT) begin
+                end else if ((data_addr_i == MMADDR_PRINT) || (data_addr_i == UVMT_MMADDR_PRINT)) begin
                     print_wdata = data_wdata_i;
                     print_valid = '1;
 
-                end else if (data_addr_i == MMADDR_TESTSTATUS) begin
+                end else if ((data_addr_i == MMADDR_TESTSTATUS) || (data_addr_i == UVMT_MMADDR_TESTSTATUS)) begin
                     if (data_wdata_i == 123456789)
                         tests_passed_o = '1;
                     else if (data_wdata_i == 1)
                         tests_failed_o = '1;
 
-                end else if (data_addr_i == MMADDR_EXIT) begin
+                end else if ((data_addr_i == MMADDR_EXIT) || (data_addr_i == UVMT_MMADDR_EXIT)) begin
                     exit_valid_o = '1;
                     exit_value_o = data_wdata_i;
 
@@ -394,15 +403,15 @@ module mm_ram
                     exit_valid_o = '1; // signal halt to testbench
                     exit_value_o = '0;
 
-                end else if (data_addr_i == MMADDR_TIMERREG) begin
+                end else if ((data_addr_i == MMADDR_TIMERREG) || (data_addr_i == UVMT_MMADDR_TIMERREG)) begin
                     timer_wdata = data_wdata_i;
                     timer_reg_valid = '1;
 
-                end else if (data_addr_i == MMADDR_TIMERVAL) begin
+                end else if ((data_addr_i == MMADDR_TIMERVAL) || (data_addr_i == UVMT_MMADDR_TIMERVAL)) begin
                     timer_wdata = data_wdata_i;
                     timer_val_valid = '1;
 
-                end else if (data_addr_i == MMADDR_DBG) begin
+                end else if ((data_addr_i == MMADDR_DBG) || (data_addr_i == UVMT_MMADDR_DBG)) begin
                     debugger_wdata = data_wdata_i;
                     debugger_valid = '1;
 
@@ -411,9 +420,9 @@ module mm_ram
                     rnd_stall_wdata = data_wdata_i;
                     rnd_stall_addr  = data_addr_i;
                     rnd_stall_we    = data_we_i;
-                end else if (data_addr_i == MMADDR_TICKS) begin
+                end else if ((data_addr_i == MMADDR_TICKS) || (data_addr_i == UVMT_MMADDR_TICKS)) begin
                     cycle_count_clear = 1;
-                end else if (data_addr_i == MMADDR_TICKS_PRINT) begin
+                end else if ((data_addr_i == MMADDR_TICKS_PRINT) || (data_addr_i == UVMT_MMADDR_TICKS_PRINT)) begin
                     cycle_count_print = 1;
                 end else begin
                     // out of bounds write
@@ -447,11 +456,13 @@ module mm_ram
                     rnd_stall_wdata    = data_wdata_i;
                     rnd_stall_addr     = data_addr_i;
                     rnd_stall_we       = data_we_i;
-                end else if (data_addr_i[31:0] == MMADDR_RNDNUM) begin
+                end else if ((data_addr_i[31:0] == MMADDR_RNDNUM) || (data_addr_i[31:0] == UVMT_MMADDR_RNDNUM)) begin
                     rnd_num_req = 1'b1;
                     select_rdata_d = RND_NUM;
-                end else if (data_addr_i == MMADDR_TICKS) begin
+                end else if ((data_addr_i == MMADDR_TICKS) || (data_addr_i == UVMT_MMADDR_TICKS)) begin
                     select_rdata_d = TICKS;
+                end else if (data_addr_i == UVMT_MMADDR_TICKS_PRINT) begin
+                    cycle_count_print = 1;
                 end else
                     select_rdata_d = ERR;
 
@@ -468,16 +479,24 @@ module mm_ram
            (data_addr_i < (dm_halt_addr_i + (2 ** DBG_ADDR_WIDTH)) )
          )
          || data_addr_i == MMADDR_PRINT
+         || data_addr_i == UVMT_MMADDR_PRINT
          || data_addr_i == MMADDR_TIMERREG
+         || data_addr_i == UVMT_MMADDR_TIMERREG
          || data_addr_i == MMADDR_TIMERVAL
+         || data_addr_i == UVMT_MMADDR_TIMERVAL
          || data_addr_i == MMADDR_DBG
+         || data_addr_i == UVMT_MMADDR_DBG
          || data_addr_i == MMADDR_TESTSTATUS
+         || data_addr_i == UVMT_MMADDR_TESTSTATUS
          || data_addr_i == MMADDR_EXIT
+         || data_addr_i == UVMT_MMADDR_EXIT
          || data_addr_i == MMADDR_SIGBEGIN
          || data_addr_i == MMADDR_SIGEND
          || data_addr_i == MMADDR_SIGDUMP
          || data_addr_i == MMADDR_TICKS
+         || data_addr_i == UVMT_MMADDR_TICKS
          || data_addr_i == MMADDR_TICKS_PRINT
+         || data_addr_i == UVMT_MMADDR_TICKS_PRINT
          || data_addr_i[31:16] == MMADDR_RNDSTALL))
            else `uvm_fatal(MM_RAM_TAG, $sformatf("out of bounds write to %08x with %08x", data_addr_i, data_wdata_i))
 `endif
