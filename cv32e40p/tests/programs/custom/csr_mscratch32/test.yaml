@@ -1,0 +1,4 @@
+name: csr_mscratch32
+uvm_test: uvmt_$(CV_CORE_LC)_firmware_test_c
+description: >
+    CSR mscratch instruction test

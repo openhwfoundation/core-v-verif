@@ -89,7 +89,7 @@ void dump_memory()
 {
     errno = 0;
     std::ofstream mem_file;
-    svLogicVecVal addr = {0};
+    svLogicVecVal addr{}; // = {0};
 
     mem_file.exceptions(std::ofstream::failbit | std::ofstream::badbit);
     try {
@@ -105,7 +105,7 @@ void dump_memory()
 
         std::cout << "[tb_top_verilator] finished dumping memory" << std::endl;
 
-    } catch (std::ofstream::failure e) {
+    } catch (std::ofstream::failure& e) {
         std::cerr << "[tb_top_verilator] exception opening/reading/closing file memory_dump.bin\n";
     }
 }
