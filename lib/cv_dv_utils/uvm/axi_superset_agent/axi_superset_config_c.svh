@@ -1,22 +1,19 @@
 // ----------------------------------------------------------------------------
-// Copyright 2023 CEA*
-// *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
+//Copyright 2023 CEA*
+//*Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
 //
-// SPDX-License-Identifier: Apache-2.0
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+//Licensed under the Apache License, Version 2.0 (the "License");
+//you may not use this file except in compliance with the License.
+//You may obtain a copy of the License at
 //
 //    http://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+//Unless required by applicable law or agreed to in writing, software
+//distributed under the License is distributed on an "AS IS" BASIS,
+//WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//See the License for the specific language governing permissions and
+//limitations under the License.
 //[END OF HEADER]
-// ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 //  Description : Configuration of the axi driver
@@ -43,7 +40,6 @@ class axi_superset_config_c extends uvm_object;
     bit                     is_master_side          ;
     axi_dv_driver_idle_t    driver_idle_value_cfg   ;
     axi_superset_txn_cfg_c  txn_config              ;
-    bit                     is_reactive             ;
     bit                     id_management_enable    ;
     bit                     protocol_checker_enable ;
     bit                     covergroup_enable       ;
@@ -58,7 +54,6 @@ class axi_superset_config_c extends uvm_object;
         `uvm_field_int        (                        is_master_side          , UVM_DEFAULT)
         `uvm_field_enum       ( axi_dv_driver_idle_t , driver_idle_value_cfg   , UVM_DEFAULT)
         `uvm_field_object     (                        txn_config              , UVM_DEFAULT)
-        `uvm_field_int        (                        is_reactive             , UVM_DEFAULT)
         `uvm_field_int        (                        id_management_enable    , UVM_DEFAULT)
         `uvm_field_int        (                        protocol_checker_enable , UVM_DEFAULT)
         `uvm_field_int        (                        covergroup_enable       , UVM_DEFAULT)
@@ -82,7 +77,6 @@ class axi_superset_config_c extends uvm_object;
         is_master_side          = 1'b1                   ; // Master side by default
         driver_idle_value_cfg   = ZERO                   ; // Zero value on idle by default
         txn_config              = null                   ; // Default txn configuration
-        is_reactive             = 1'b0                   ; // Not reactive slave by default
         id_management_enable    = 1'b1                   ; // Unique id gestion by default
         protocol_checker_enable = 1'b1                   ; // Protocol checker enabled by default
         covergroup_enable       = 1'b0                   ; // Covergroup disabled by default
@@ -108,7 +102,6 @@ class axi_superset_config_c extends uvm_object;
         s = $sformatf("%0s AGENT_MASTER_SIDE=%0b(b),"        , s , is_master_side              ) ;
         s = $sformatf("%0s DRIVER_IDLE_VALUE=%0p(p),"        , s , driver_idle_value_cfg       ) ;
         s = $sformatf("%0s TRANSACTION_CFG=%0s(s),"          , s , txn_config.convert2string() ) ;
-        s = $sformatf("%0s IS_REACTIVE=%0b(b),"              , s , is_reactive                 ) ;
         s = $sformatf("%0s ID_MANAGEMENT_ENABLE=%0b(b),"     , s , id_management_enable        ) ;
         s = $sformatf("%0s PROTOCOL_CHECKER_ENABLE=%0b(b),"  , s , protocol_checker_enable     ) ;
         s = $sformatf("%0s COVERGROUP_ENABLE=%0b(b),"        , s , covergroup_enable           ) ;
@@ -185,17 +178,6 @@ class axi_superset_config_c extends uvm_object;
     function void set_txn_config( axi_superset_txn_cfg_c config_i );
       txn_config = config_i ;
     endfunction: set_txn_config
-
-    // -----------------------------------------------------------------------
-    // is_reactive
-    // -----------------------------------------------------------------------
-    function void set_is_reactive( bit new_is_reactive );
-      this.is_reactive = new_is_reactive;
-    endfunction : set_is_reactive
-
-    function bit get_is_reactive( );
-      get_is_reactive = this.is_reactive;
-    endfunction : get_is_reactive
 
     // -----------------------------------------------------------------------
     // id_management_enable

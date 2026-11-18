@@ -52,7 +52,7 @@ The AXI agent needs to be configured, in order for it to function correctly. The
     m_agent_cfg.set_is_reactive(1'b0)                  // Set if the slave agent is reactive: only work for slave agent, and allows the slave agent to generate random responses corresponding to the incoming requests
     m_agent_cfg.set_id_management_enable(1'b1)         // Set the management of unique id per transaction type : 1'b1 => enabling unique id management; 1'b0 => disabling unique id management
     m_agent_cfg.set_protocol_checker_enable(1'b1)    ; // Enable/Disable the protocol checker : 1'b1 => enable the protocol checker ; 1'b0 => disabling the protocol checker ; Enable by default
-    m_agent_cfg.set_covergroup_enable(1'b0)          ; // Enable/Disable the covergroup : 1'b1 => Instantiate the covergroup ; 1'b0 => Don't instantiate the covergroup ; Disable by default
+    m_agent_cfg.set_covergroup_enable(1'b0)          ; // Enable/Disable the covergroup : 1'b1 => Instantiate the covergroup ; 1'b0 => Don't instantiate the covergroup ; Disable by default ; This configuration will only work if the protocol checker is enabled
 
     m_agent_cfg.set_agent_config(m_agent_master_cfg) ; // Setting the configuration of the agent with the configuration created above
 
@@ -62,7 +62,7 @@ The AXI agent needs to be configured, in order for it to function correctly. The
 ```
 ## Transaction Configuration APIs (axi_superset_txn_cfg_c)
 
-THe AXI package (axi_superset_pkg) has the parameters that define the maximum allowed size of the buses. For example (this list is not exhaustive): 
+The AXI package (axi_superset_pkg) has the parameters that define the maximum allowed size of the buses. For example (this list is not exhaustive):
 
   * parameter int MAX_ID_WIDTH   = 64   ; // subjective maximum 
   * parameter int MAX_ADDR_WIDTH = 64   ; // subjective maximum
@@ -224,8 +224,6 @@ package.
 
 ### List of unsupported features
 *	Protocol error insertion is unsupported: randomization of non-valid transactions is not supported, but the user can set the fields after the randomization.
-*	FIXED and WRAP burst mode
-*	Protected accesses: AxPROT signals
 *	Region accesses : AxREGION( can be used, but no verification associated )
 *	QOS accesses: AxQOS: The protocol does not specify the exact use of the QoS identifier.
 *	No constraints with ATOP_CMP transactions
@@ -371,6 +369,8 @@ Following steps needs to be taken to integrate
 
 ## Declaration
 
+    import axi_superset_pkg::*;
+
     // Declaration of the agent module
     axi_superset_agent_c  m_agent_master;
 
@@ -487,6 +487,8 @@ The user has different options to configure the number of transactions sent by a
 
 ## In the Test-bench top
  
+    import axi_superset_pkg::*;
+    
     axi_superset_if  axi_vif     (.clk_i(clk_i), .reset_n(reset_n));
     axi_superset_if  axi_vif_bis (.clk_i(clk_i), .reset_n(reset_n));
 
