@@ -25,7 +25,8 @@ class uvma_pma_agent_c#(int ILEN=DEFAULT_ILEN,
    uvma_pma_cntxt_c            cntxt;
 
    // Components
-   uvma_pma_mon_c#(ILEN,XLEN)  monitor;
+   uvma_pma_axi_mon_c#(ILEN,XLEN)  monitor_axi;
+   uvma_pma_obi_mon_c#(ILEN,XLEN)  monitor_obi;
    uvma_pma_sb_c               scoreboard;
    uvma_pma_cov_model_c        cov_model;
    uvma_pma_region_cov_model_c region_cov_model[];
@@ -151,7 +152,6 @@ endfunction : get_and_set_cntxt
 
 function void uvma_pma_agent_c::create_components();
 
-   monitor         = uvma_pma_mon_c#(ILEN,XLEN)           ::type_id::create("monitor"        , this);
    scoreboard      = uvma_pma_sb_c#(ILEN,XLEN)            ::type_id::create("scoreboard"     , this);
    cov_model       = uvma_pma_cov_model_c                 ::type_id::create("cov_model"      , this);
    region_cov_model = new[cfg.regions.size()];
@@ -161,12 +161,29 @@ function void uvma_pma_agent_c::create_components();
    end
    mon_trn_logger  = uvma_pma_mon_trn_logger_c#(ILEN,XLEN)::type_id::create("mon_trn_logger" , this);
 
+   if(cfg.memory_intf == UVMA_PMA_OBI_INTF) begin
+      monitor_obi  = uvma_pma_obi_mon_c#(ILEN,XLEN)::type_id::create("monitor_obi" , this);
+   end
+   else if(cfg.memory_intf == UVMA_PMA_AXI_INTF) begin
+      monitor_axi  = uvma_pma_axi_mon_c#(ILEN,XLEN)::type_id::create("monitor_axi" , this );
+   end
+   else begin
+      `uvm_fatal("CFG", "Configuration does not contain valid memory interface")
+   end
+   mon_ap = new("mon_ap", this);
+
 endfunction : create_components
 
 
 function void uvma_pma_agent_c::connect_analysis_ports();
 
-   mon_ap = monitor.ap;
+   if(cfg.memory_intf == UVMA_PMA_OBI_INTF) begin
+      mon_ap =  monitor_obi.ap;
+   end else begin
+      mon_ap =  monitor_axi.ap;
+   end
+   //Establishing connections between monitor ports and scoreboard
+   this.mon_ap.connect(scoreboard.pma_export);
 
 endfunction : connect_analysis_ports
 

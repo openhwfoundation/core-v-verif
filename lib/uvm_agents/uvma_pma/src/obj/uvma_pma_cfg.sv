@@ -26,16 +26,23 @@ class uvma_pma_cfg_c#(int ILEN=DEFAULT_ILEN,
    rand bit                      scoreboard_enabled;
    rand bit                      cov_model_enabled;
    rand bit                      trn_log_enabled;
+   rand bit                      bufferable_supported;
+   rand bit                      atomic_supported;
+   rand uvma_pma_intf_enum       memory_intf;
 
    // PMA regions
    uvma_core_cntrl_pma_region_c  regions[];
 
+
    `uvm_object_param_utils_begin(uvma_pma_cfg_c#(ILEN,XLEN))
       `uvm_field_int (                         enabled           , UVM_DEFAULT)
       `uvm_field_enum(uvm_active_passive_enum, is_active         , UVM_DEFAULT)
+      `uvm_field_enum(uvma_pma_intf_enum,      memory_intf       , UVM_DEFAULT)
       `uvm_field_int (                         scoreboard_enabled, UVM_DEFAULT)
       `uvm_field_int (                         cov_model_enabled , UVM_DEFAULT)
       `uvm_field_int (                         trn_log_enabled   , UVM_DEFAULT)
+      `uvm_field_int (                       bufferable_supported, UVM_DEFAULT)
+      `uvm_field_int (                         atomic_supported  , UVM_DEFAULT)
       `uvm_field_array_object(                 regions           , UVM_DEFAULT)
    `uvm_object_utils_end
 
@@ -46,9 +53,12 @@ class uvma_pma_cfg_c#(int ILEN=DEFAULT_ILEN,
 
    constraint defaults_cons {
       soft enabled            == 1;
-      soft cov_model_enabled  == 0;
+      soft cov_model_enabled  == 1;
+      bufferable_supported    == 0;
+      atomic_supported        == 0;
       soft scoreboard_enabled == 1;
       soft trn_log_enabled    == 1;
+      soft memory_intf        == UVMA_PMA_AXI_INTF;
    }
 
 
@@ -61,6 +71,7 @@ class uvma_pma_cfg_c#(int ILEN=DEFAULT_ILEN,
     * Return PMA region index for address, returns -1 if not mapped
     */
    extern virtual function int get_pma_region_for_addr(bit [XLEN-1:0] addr);
+   extern virtual function bit addr_in_region(bit [XLEN-1:0] byte_addr, uvma_core_cntrl_pma_region_c region);
 
 endclass : uvma_pma_cfg_c
 
@@ -76,13 +87,30 @@ function int uvma_pma_cfg_c::get_pma_region_for_addr(bit[XLEN-1:0] addr);
 
    // In default PMA configurations overlapping regions map from low index to high
    for (int i = 0; i < regions.size(); i++) begin
-      if (regions[i].is_addr_in_region(addr))
-         return i;
+      if (memory_intf == UVMA_PMA_AXI_INTF) begin
+         if (addr_in_region(addr, regions[i]))
+            return i;
+      end
+      else if (memory_intf == UVMA_PMA_OBI_INTF) begin
+         if (regions[i].is_addr_in_region(addr))
+            return i;
+      end
+     else begin
+     `uvm_fatal("CFG", "Configuration does not contain valid memory interface")
+     end
    end
 
    return -1;
 
 endfunction : get_pma_region_for_addr
 
+function bit uvma_pma_cfg_c::addr_in_region(bit [XLEN-1:0] byte_addr, uvma_core_cntrl_pma_region_c region);
+
+   // Per User manual, do not include the upper word address
+   if (((byte_addr) >= region.word_addr_low) &&
+       ((byte_addr) < region.word_addr_high))
+      return 1;
+   return 0;
+endfunction : addr_in_region
 
 `endif // __UVMA_PMA_CFG_SV__

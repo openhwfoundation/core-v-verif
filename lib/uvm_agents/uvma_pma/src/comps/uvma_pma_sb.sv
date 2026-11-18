@@ -22,18 +22,18 @@ class uvma_pma_sb_c#(int ILEN=DEFAULT_ILEN,
    uvma_pma_cfg_c    cfg;
 
    // Counters
-   int unsigned obi_i_checked_cnt;
-   int unsigned obi_d_checked_cnt;
+   int unsigned pma_trn_i_checked_cnt;
+   int unsigned pma_trn_d_checked_cnt;
 
    // TLM exports
    uvm_analysis_imp_rvfi_instr#(uvma_rvfi_instr_seq_item_c#(ILEN,XLEN), uvma_pma_sb_c)  rvfi_instr_export;
-   uvm_analysis_imp_obi_i#(uvma_obi_memory_mon_trn_c, uvma_pma_sb_c)                    obi_i_export;
-   uvm_analysis_imp_obi_d#(uvma_obi_memory_mon_trn_c, uvma_pma_sb_c)                    obi_d_export;
+   uvm_analysis_export#(uvma_pma_mon_trn_c)                   pma_export;
+   uvm_tlm_analysis_fifo #(uvma_pma_mon_trn_c)                pma_fifo;
 
    `uvm_component_param_utils_begin(uvma_pma_sb_c#(ILEN,XLEN))
       `uvm_field_object(cfg           , UVM_DEFAULT)
-      `uvm_field_int(obi_i_checked_cnt, UVM_DEFAULT)
-      `uvm_field_int(obi_d_checked_cnt, UVM_DEFAULT)
+      `uvm_field_int(pma_trn_i_checked_cnt, UVM_DEFAULT)
+      `uvm_field_int(pma_trn_d_checked_cnt, UVM_DEFAULT)
    `uvm_component_utils_end
 
    /**
@@ -67,44 +67,44 @@ class uvma_pma_sb_c#(int ILEN=DEFAULT_ILEN,
    extern virtual function void write_rvfi_instr(uvma_rvfi_instr_seq_item_c#(ILEN,XLEN) instr);
 
    /**
-    * OBI instruction
+    *  Check pma_trn instruction
     */
-   extern virtual function void write_obi_i(uvma_obi_memory_mon_trn_c obi);
+   extern virtual function void write_pma_trn_i(uvma_pma_mon_trn_c pma_trn);
 
    /**
-    * OBI data
+    * Check pma_trn data
     */
-   extern virtual function void write_obi_d(uvma_obi_memory_mon_trn_c obi);
+   extern virtual function void write_pma_trn_d(uvma_pma_mon_trn_c pma_trn);
 
    /**
-    * Check an OBI instruction fetch for a deconfigured PMA region (PMA disabled)
+    * Check an pma_trn instruction fetch for a deconfigured PMA region (PMA disabled)
     */
-   extern virtual function void check_obi_i_deconfigured(uvma_obi_memory_mon_trn_c obi);
+   extern virtual function void check_pma_trn_i_deconfigured(uvma_pma_mon_trn_c pma_trn);
 
    /**
-    * Check an OBI instruction fetch for a mappped region
+    * Check an pma_trn instruction fetch for a mappped region
     */
-   extern virtual function void check_obi_i_mapped_region(uvma_obi_memory_mon_trn_c obi, int index);
+   extern virtual function void check_pma_trn_i_mapped_region(uvma_pma_mon_trn_c pma_trn, int index);
 
    /**
-    * Check an OBI instruction fetch for a default PMA region (PMA enabled, but address does not map to any region)
+    * Check an pma_trn instruction fetch for a default PMA region (PMA enabled, but address does not map to any region)
     */
-   extern virtual function void check_obi_i_default_region(uvma_obi_memory_mon_trn_c obi);
+   extern virtual function void check_pma_trn_i_default_region(uvma_pma_mon_trn_c pma_trn);
 
    /**
-    * Check an OBI data accessfor a deconfigured PMA region (PMA disabled)
+    * Check an pma_trn data accessfor a deconfigured PMA region (PMA disabled)
     */
-   extern virtual function void check_obi_d_deconfigured(uvma_obi_memory_mon_trn_c obi);
+   extern virtual function void check_pma_trn_d_deconfigured(uvma_pma_mon_trn_c pma_trn, int index);
 
    /**
-    * Check an OBI data access for a mappped region
+    * Check an pma_trn data access for a mappped region
     */
-   extern virtual function void check_obi_d_mapped_region(uvma_obi_memory_mon_trn_c obi, int index);
+   extern virtual function void check_pma_trn_d_mapped_region(uvma_pma_mon_trn_c pma_trn, int index);
 
    /**
-    * Check an OBI data access for a default PMA region (PMA enabled, but address does not map to any region)
+    * Check an pma_trn data access for a default PMA region (PMA enabled, but address does not map to any region)
     */
-   extern virtual function void check_obi_d_default_region(uvma_obi_memory_mon_trn_c obi);
+   extern virtual function void check_pma_trn_d_default_region(uvma_pma_mon_trn_c pma_trn);
 
    /**
     * Common print report state
@@ -131,14 +131,32 @@ function void uvma_pma_sb_c::build_phase(uvm_phase phase);
    end
 
    rvfi_instr_export = new("rvfi_instr_export", this);
-   obi_i_export      = new("obi_i_export",      this);
-   obi_d_export      = new("obi_d_export",      this);
+   pma_export    = new("pma_export", this);
+   pma_fifo      = new("pma_fifo", this);
+
+   this.pma_export.connect(this.pma_fifo.analysis_export);
+
 endfunction : build_phase
 
 task uvma_pma_sb_c::run_phase(uvm_phase phase);
 
    super.run_phase(phase);
 
+   forever begin
+      uvma_pma_mon_trn_c pma_trn;
+
+      pma_fifo.get(pma_trn);
+
+      if(pma_trn.access == UVMA_PMA_ACCESS_INSTR) begin
+
+         write_pma_trn_i(pma_trn);
+
+      end else begin
+
+         write_pma_trn_d(pma_trn);
+
+      end
+   end
 endtask : run_phase
 
 function void uvma_pma_sb_c::write_rvfi_instr(uvma_rvfi_instr_seq_item_c#(ILEN,XLEN) instr);
@@ -146,7 +164,7 @@ function void uvma_pma_sb_c::write_rvfi_instr(uvma_rvfi_instr_seq_item_c#(ILEN,X
 endfunction : write_rvfi_instr
 
 
-function void uvma_pma_sb_c::write_obi_i(uvma_obi_memory_mon_trn_c obi);
+function void uvma_pma_sb_c::write_pma_trn_i(uvma_pma_mon_trn_c pma_trn);
 
    int index;
 
@@ -154,31 +172,31 @@ function void uvma_pma_sb_c::write_obi_i(uvma_obi_memory_mon_trn_c obi);
    if (!cfg.scoreboard_enabled)
       return;
 
-   // Will check this OBI
-   obi_i_checked_cnt++;
+   // Will check this pma_trn
+   pma_trn_i_checked_cnt++;
 
    // If deconfigured then check directly
    if (cfg.regions.size() == 0) begin
-      check_obi_i_deconfigured(obi);
 
+      check_pma_trn_i_deconfigured(pma_trn);
       return;
    end
 
-   // Get expected index of the OBI transaction
-   index = cfg.get_pma_region_for_addr(obi.address);
+   // Get expected index of the pma_trn transaction
+   index = cfg.get_pma_region_for_addr(pma_trn.address);
 
-   // If the region does not map, then we are in the default OBI region
+   // If the region does not map, then we are in the default pma_trn region
    if (index == -1) begin
-      check_obi_i_default_region(obi);
 
+      check_pma_trn_i_default_region(pma_trn);
       return;
    end
 
-   check_obi_i_mapped_region(obi, index);
+   check_pma_trn_i_mapped_region(pma_trn, index);
 
-endfunction : write_obi_i
+endfunction : write_pma_trn_i
 
-function void uvma_pma_sb_c::write_obi_d(uvma_obi_memory_mon_trn_c obi);
+function void uvma_pma_sb_c::write_pma_trn_d(uvma_pma_mon_trn_c pma_trn);
 
    int index;
 
@@ -186,28 +204,28 @@ function void uvma_pma_sb_c::write_obi_d(uvma_obi_memory_mon_trn_c obi);
    if (!cfg.scoreboard_enabled)
       return;
 
-   obi_d_checked_cnt++;
+   pma_trn_d_checked_cnt++;
+   // Get expected index of the pma_trn transaction
+   index = cfg.get_pma_region_for_addr(pma_trn.address);
 
    // If deconfigured then check directly
    if (cfg.regions.size() == 0) begin
-      check_obi_d_deconfigured(obi);
 
+      check_pma_trn_d_deconfigured(pma_trn, index);
       return;
    end
 
-   // Get expected index of the OBI transaction
-   index = cfg.get_pma_region_for_addr(obi.address);
 
-   // If the region does not map, then we are in the default OBI region
+   // If the region does not map, then we are in the default pma_trn region
    if (index == -1) begin
-      check_obi_d_default_region(obi);
+      check_pma_trn_d_default_region(pma_trn);
 
       return;
    end
 
-   check_obi_d_mapped_region(obi, index);
+   check_pma_trn_d_mapped_region(pma_trn, index);
 
-endfunction : write_obi_d
+endfunction : write_pma_trn_d
 
 function void uvma_pma_sb_c::report_phase(uvm_phase phase);
 
@@ -223,160 +241,161 @@ endfunction : pre_abort
 
 function void uvma_pma_sb_c::print_checked_stats();
 
-   `uvm_info("PMASB", $sformatf("checked %0d OBI I transactions", obi_i_checked_cnt), UVM_NONE);
-   `uvm_info("PMASB", $sformatf("checked %0d OBI D transactions", obi_d_checked_cnt), UVM_NONE);
+   `uvm_info("PMASB", $sformatf("checked %0d pma_trn I transactions", pma_trn_i_checked_cnt), UVM_NONE);
+   `uvm_info("PMASB", $sformatf("checked %0d pma_trn D transactions", pma_trn_d_checked_cnt), UVM_NONE);
 
 endfunction : print_checked_stats
 
-function void uvma_pma_sb_c::check_obi_i_deconfigured(uvma_obi_memory_mon_trn_c obi);
+function void uvma_pma_sb_c::check_pma_trn_i_deconfigured(uvma_pma_mon_trn_c pma_trn);
 
-   // Check: Bufferable bit must be 0 in OBI for instruction fetches
-   if (obi.memtype[UVMA_OBI_MEMORY_MEMTYPE_BUFFERABLE_BIT]) begin
-      `uvm_error("PMAOBII", $sformatf("OBI I %s address: 0x%08x bufferable bit set for deconfigured PMA",
-                                       obi.access_type.name(), obi.address));
+   // Check: Bufferable bit must be 0 in pma_trn for instruction fetches
+   if ((pma_trn.memtype == UVMA_PMA_MEM_NC_NB) || (pma_trn.memtype ==UVMA_PMA_MEM_C_NB )) begin
+      `uvm_error("PMA_trnI", $sformatf("pma_trn I %s address: 0x%08x bufferable bit set for deconfigured PMA",
+                                       pma_trn.access, pma_trn.address));
    end
 
-   // Check: Cacheable bit must be 0 in OBI
-   if (obi.memtype[UVMA_OBI_MEMORY_MEMTYPE_CACHEABLE_BIT]) begin
-      `uvm_error("PMAOBII", $sformatf("OBI I %s address: 0x%08x cacheable bit set for deconfigured PMA",
-                                       obi.access_type.name(), obi.address));
-   end
-
-   // Check: atomic attributes should be 0
-   if (obi.atop) begin
-      `uvm_error("PMAOBII", $sformatf("OBI I %s address: 0x%08x atop is not zero, OBI: 0x%0x",
-                                       obi.access_type.name(), obi.address,
-                                       obi.atop));
-   end
-
-endfunction : check_obi_i_deconfigured
-
-function void uvma_pma_sb_c::check_obi_i_default_region(uvma_obi_memory_mon_trn_c obi);
-
-   // Check: Bufferable bit must be 0 in OBI for instruction fetches
-   if (obi.memtype[UVMA_OBI_MEMORY_MEMTYPE_BUFFERABLE_BIT]) begin
-      `uvm_error("PMAOBII", $sformatf("OBI I %s address: 0x%08x bufferable bit set for PMA default region",
-                                       obi.access_type.name(), obi.address));
-   end
-
-   // Check: Cacheable bit must be 0 in OBI
-   if (obi.memtype[UVMA_OBI_MEMORY_MEMTYPE_CACHEABLE_BIT]) begin
-      `uvm_error("PMAOBII", $sformatf("OBI I %s address: 0x%08x cacheable bit set for PMA default region",
-                                       obi.access_type.name(), obi.address));
+   // Check: Cacheable bit must be 0 in pma_trn
+   if ((pma_trn.memtype == UVMA_PMA_MEM_NC_NB) || (pma_trn.memtype ==UVMA_PMA_MEM_NC_B)) begin
+      `uvm_error("PMA_trnI", $sformatf("pma_trn I %s address: 0x%08x cacheable bit set for deconfigured PMA",
+                                       pma_trn.access, pma_trn.address));
    end
 
    // Check: atomic attributes should be 0
-   if (obi.atop) begin
-      `uvm_error("PMAOBII", $sformatf("OBI I %s address: 0x%08x atop is not zero, OBI: 0x%0x",
-                                       obi.access_type.name(), obi.address,
-                                       obi.atop));
+   if (pma_trn.atomic) begin
+      `uvm_error("PMA_trnI", $sformatf("pma_trn I %s address: 0x%08x atomic is not zero, pma_trn: 0x%0x",
+                                       pma_trn.access.name(), pma_trn.address,
+                                       pma_trn.atomic));
    end
 
-endfunction : check_obi_i_default_region
+endfunction : check_pma_trn_i_deconfigured
 
-function void uvma_pma_sb_c::check_obi_i_mapped_region(uvma_obi_memory_mon_trn_c obi, int index);
 
+ function void uvma_pma_sb_c::check_pma_trn_i_default_region(uvma_pma_mon_trn_c pma_trn);
+
+   // Check: Bufferable bit must be 0 in pma_trn for instruction fetches
+   if ((pma_trn.memtype == UVMA_PMA_MEM_NC_B ) || (pma_trn.memtype == UVMA_PMA_MEM_C_B )) begin
+      `uvm_error("PMA_trnI", $sformatf("pma_trn I %s address: 0x%08x bufferable bit set for PMA default region",
+                                       pma_trn.access.name(), pma_trn.address));
+   end
+
+   // Check: Cacheable bit must be 0 in pma_trn
+   if ((pma_trn.memtype == UVMA_PMA_MEM_C_NB) || (pma_trn.memtype == UVMA_PMA_MEM_C_B)) begin
+      `uvm_error("PMA_trnI", $sformatf("pma_trn I %s address: 0x%08x cacheable bit set for PMA default region",
+                                       pma_trn.access.name(), pma_trn.address));
+   end
+
+   // Check: atomic attributes should be 0
+   if (pma_trn.atomic) begin
+      `uvm_error("PMA_trnI", $sformatf("pma_trn I %s address: 0x%08x atomic is not zero, pma_trn: 0x%0x",
+                                       pma_trn.access.name(), pma_trn.address,
+                                       pma_trn.atomic));
+   end
+
+endfunction : check_pma_trn_i_default_region
+
+
+function void uvma_pma_sb_c::check_pma_trn_i_mapped_region(uvma_pma_mon_trn_c pma_trn, int index);
    // Check: Must be main memory
    if (!cfg.regions[index].main) begin
-      `uvm_error("PMAOBII", $sformatf("OBI I %s address: 0x%08x, region: %0d instruction fetch from I/O memory",
-                                       obi.access_type.name(), obi.address, index));
+      `uvm_error("PMA_trnI", $sformatf("pma_trn I %s address: 0x%08x, region: %0d instruction fetch from I/O memory",
+                                       pma_trn.access.name(), pma_trn.address, index));
    end
 
-   // Check: Bufferable bit must be 0 in OBI for instruction fetches
-   if (obi.memtype[UVMA_OBI_MEMORY_MEMTYPE_BUFFERABLE_BIT]) begin
-      `uvm_error("PMAOBII", $sformatf("OBI I %s address: 0x%08x bufferable bit set for PMA default region",
-                                       obi.access_type.name(), obi.address));
+   // Check: Bufferable bit must be 0 in pma_trn for instruction fetches
+   if ((pma_trn.memtype == UVMA_PMA_MEM_NC_B ) || (pma_trn.memtype ==UVMA_PMA_MEM_C_B )) begin
+      `uvm_error("PMA_trnI", $sformatf("pma_trn I %s address: 0x%08x bufferable bit set for PMA default region",
+                                       pma_trn.access.name(), pma_trn.address));
    end
 
-   // Check: Cacheable bit must match mem_type[0] in OBI
-   if (obi.memtype[1] != cfg.regions[index].cacheable) begin
-      `uvm_error("PMAOBII", $sformatf("OBI I %s address: 0x%08x, region: %0d cacheable bit mismatch, OBI: %0d, PMA: %0d",
-                                       obi.access_type.name(), obi.address, index,
-                                       obi.memtype[1], cfg.regions[index].cacheable));
-   end
-
-   // Check: atomic attributes should be 0
-   if (obi.atop) begin
-      `uvm_error("PMAOBII", $sformatf("OBI I %s address: 0x%08x, region: %0d atop is not zero, OBI: 0x%0x",
-                                       obi.access_type.name(), obi.address, index,
-                                       obi.atop));
-   end
-
-endfunction : check_obi_i_mapped_region
-
-function void uvma_pma_sb_c::check_obi_d_deconfigured(uvma_obi_memory_mon_trn_c obi);
-
-   // Check: Bufferable bit must be 0 in OBI
-   if (obi.memtype[UVMA_OBI_MEMORY_MEMTYPE_BUFFERABLE_BIT]) begin
-      `uvm_error("PMAOBID", $sformatf("OBI D %s address: 0x%08x bufferable bit set for deconfigured PMA",
-                                       obi.access_type.name(), obi.address));
-   end
-
-   // Check: Cacheable bit must be 0 in OBI
-   if (obi.memtype[UVMA_OBI_MEMORY_MEMTYPE_CACHEABLE_BIT]) begin
-      `uvm_error("PMAOBID", $sformatf("OBI D %s address: 0x%08x cacheable bit set for deconfigured PMA",
-                                       obi.access_type.name(), obi.address));
-   end
-
-endfunction : check_obi_d_deconfigured
-
-function void uvma_pma_sb_c::check_obi_d_default_region(uvma_obi_memory_mon_trn_c obi);
-
-   // Check: Bufferable bit must be 0 in OBI
-   if (obi.memtype[UVMA_OBI_MEMORY_MEMTYPE_BUFFERABLE_BIT]) begin
-      `uvm_error("PMAOBID", $sformatf("OBI D %s address: 0x%08x bufferable bit set for PMA default region",
-                                       obi.access_type.name(), obi.address));
-   end
-
-   // Check: Cacheable bit must be 0 in OBI
-   if (obi.memtype[UVMA_OBI_MEMORY_MEMTYPE_CACHEABLE_BIT]) begin
-      `uvm_error("PMAOBID", $sformatf("OBI D %s address: 0x%08x cacheable bit set for PMA default region",
-                                       obi.access_type.name(), obi.address));
+   // Check: Cacheable bit must match memtype[0] in pma_trn
+   if ((((pma_trn.memtype == UVMA_PMA_MEM_NC_NB) || (pma_trn.memtype == UVMA_PMA_MEM_NC_B)) && cfg.regions[index].cacheable ==1) || (((pma_trn.memtype == UVMA_PMA_MEM_C_NB) || (pma_trn.memtype == UVMA_PMA_MEM_C_B)) && cfg.regions[index].cacheable ==0)) begin
+      `uvm_error("PMA_trnI", $sformatf("pma_trn I %s address: 0x%08x, region: %0d cacheable bit mismatch, pma_trn: %s, PMA: %0d",
+                                       pma_trn.access.name(), pma_trn.address, index,
+                                       pma_trn.memtype.name(), cfg.regions[index].cacheable));
    end
 
    // Check: atomic attributes should be 0
-   if (obi.atop) begin
-      `uvm_error("PMAOBID", $sformatf("OBI D %s address: 0x%08x atop is not zero for PMA default region, OBI: 0x%0x",
-                                       obi.access_type.name(), obi.address,
-                                       obi.atop));
+   if (pma_trn.atomic) begin
+      `uvm_error("PMA_trnI", $sformatf("pma_trn I %s address: 0x%08x, region: %0d atomic is not zero, OBI: 0x%0x",
+                                       pma_trn.access.name(), pma_trn.address, index,
+                                       pma_trn.atomic));
    end
 
-endfunction : check_obi_d_default_region
+endfunction : check_pma_trn_i_mapped_region
+
+function void uvma_pma_sb_c::check_pma_trn_d_deconfigured(uvma_pma_mon_trn_c pma_trn, int index);
+
+   // Check: Bufferable bit must be 0 in pma_trn
+   if ((pma_trn.memtype == UVMA_PMA_MEM_NC_NB) || (pma_trn.memtype ==UVMA_PMA_MEM_C_NB) ) begin
+      `uvm_error("PMA_trnD", $sformatf("pma_trn D %s address: 0x%08x bufferable bit set for PMA default region",
+                                       pma_trn.access.name(), pma_trn.address));
+   end
+
+   // Check: Cacheable bit must match cacheable flag in pma_trn
+   if (((pma_trn.memtype == UVMA_PMA_MEM_NC_NB) || (pma_trn.memtype == UVMA_PMA_MEM_NC_B) && cfg.regions[index].cacheable ==1) || ((pma_trn.memtype == UVMA_PMA_MEM_C_NB) || (pma_trn.memtype == UVMA_PMA_MEM_C_B) && cfg.regions[index].cacheable ==0)  ) begin
+      `uvm_error("PMA_trnD", $sformatf("pma_trn D %s address: 0x%08x, region: %0d cacheable bit mismatch, pma_trn: %s, PMA: %0d",
+                                       pma_trn.access.name(), pma_trn.address, index,
+                                       pma_trn.memtype.name(), cfg.regions[index].cacheable));
+   end
+
+endfunction : check_pma_trn_d_deconfigured
+
+function void uvma_pma_sb_c::check_pma_trn_d_default_region(uvma_pma_mon_trn_c pma_trn);
+
+   // Check: Bufferable bit must be 0 in pma_trn for data loads
+   if ((pma_trn.memtype == UVMA_PMA_MEM_NC_NB ) || (pma_trn.memtype == UVMA_PMA_MEM_C_NB )) begin
+      `uvm_error("PMA_trnD", $sformatf("pma_trn D %s address: 0x%08x bufferable bit set for PMA default region",
+                                       pma_trn.access.name(), pma_trn.address));
+   end
+
+   // Check: Cacheable bit must be 0 in pma_trn
+   if ((pma_trn.memtype == UVMA_PMA_MEM_NC_NB) || (pma_trn.memtype == UVMA_PMA_MEM_NC_B)) begin
+      `uvm_error("PMA_trnD", $sformatf("pma_trn D %s address: 0x%08x cacheable bit set for PMA default region",
+                                       pma_trn.access.name(), pma_trn.address));
+   end
+
+   // Check: atomic attributes should be 0
+   if (pma_trn.atomic) begin
+      `uvm_error("PMA_trnD", $sformatf("pma_trn D %s address: 0x%08x atomic is not zero, pma_trn: 0x%0x",
+                                       pma_trn.access.name(), pma_trn.address,
+                                       pma_trn.atomic));
+   end
+
+endfunction : check_pma_trn_d_default_region
 
 
-function void uvma_pma_sb_c::check_obi_d_mapped_region(uvma_obi_memory_mon_trn_c obi, int index);
+function void uvma_pma_sb_c::check_pma_trn_d_mapped_region(uvma_pma_mon_trn_c pma_trn, int index);
 
-
-   if (obi.access_type == UVMA_OBI_MEMORY_ACCESS_READ) begin
-      // Check: Bufferable bit must be 0 in OBI for data loads
-      if (obi.memtype[UVMA_OBI_MEMORY_MEMTYPE_BUFFERABLE_BIT]) begin
-         `uvm_error("PMAOBID", $sformatf("OBI D %s address: 0x%08x, region: %0d bufferable bit set for data load",
-                                          obi.access_type.name(), obi.address, index));
+   if (pma_trn.rw == UVMA_PMA_RW_READ) begin
+      // Check: Bufferable bit must be 0 in pma_trn for data loads
+      if ((pma_trn.memtype == UVMA_PMA_MEM_NC_B ) || (pma_trn.memtype == UVMA_PMA_MEM_C_B )) begin
+         `uvm_error("PMA_trnD", $sformatf("pma_trn D %s address: 0x%08x, region: %0d bufferable bit set for data load",
+                                          pma_trn.access.name(), pma_trn.address, index));
       end
    end
    else begin
-      // Check: Bufferable bit must match mem_type[0] in OBI
-      if (obi.memtype[UVMA_OBI_MEMORY_MEMTYPE_BUFFERABLE_BIT] != cfg.regions[index].bufferable) begin
-         `uvm_error("PMAOBID", $sformatf("OBI D %s address: 0x%08x, region: %0d bufferable bit mismatch, OBI: %0d, PMA: %0d",
-                                          obi.access_type.name(), obi.address, index,
-                                          obi.memtype[UVMA_OBI_MEMORY_MEMTYPE_BUFFERABLE_BIT], cfg.regions[index].bufferable));
+      // Check: Bufferable bit must match memtype in pma_trn
+      if ((((pma_trn.memtype == UVMA_PMA_MEM_NC_NB) || (pma_trn.memtype == UVMA_PMA_MEM_C_NB)) && cfg.regions[index].bufferable ==1) || (((pma_trn.memtype == UVMA_PMA_MEM_C_NB) || (pma_trn.memtype == UVMA_PMA_MEM_C_B)) && cfg.regions[index].bufferable ==0)  ) begin
+         `uvm_error("PMA_trnD", $sformatf("OBI D %s address: 0x%08x, region: %0d bufferable bit mismatch, pma_trn: %0d, PMA: %0d",
+                                          pma_trn.access.name(), pma_trn.address, index,
+                                          pma_trn.memtype.name(), cfg.regions[index].bufferable));
       end
    end
 
-   // Check: Cacheable bit must match mem_type[0] in OBI
-   if (obi.memtype[UVMA_OBI_MEMORY_MEMTYPE_CACHEABLE_BIT] != cfg.regions[index].cacheable) begin
-      `uvm_error("PMAOBID", $sformatf("OBI D %s address: 0x%08x, region: %0d cacheable bit mismatch, OBI: %0d, PMA: %0d",
-                                       obi.access_type.name(), obi.address, index,
-                                       obi.memtype[UVMA_OBI_MEMORY_MEMTYPE_CACHEABLE_BIT], cfg.regions[index].cacheable));
+   // Check: Cacheable bit must match memtype in pma_trn
+   if ((((pma_trn.memtype == UVMA_PMA_MEM_NC_NB) || (pma_trn.memtype == UVMA_PMA_MEM_NC_B)) && cfg.regions[index].cacheable ==1) || (((pma_trn.memtype == UVMA_PMA_MEM_C_NB) || (pma_trn.memtype == UVMA_PMA_MEM_C_B)) && cfg.regions[index].cacheable ==0)  ) begin
+     `uvm_error("PMA_trnD", $sformatf("pma_trn D %s address: 0x%08x, region: %0d cacheable bit mismatch, pma_trn: %s, PMA: %0d",
+                                       pma_trn.access.name(), pma_trn.address, index,
+                                       pma_trn.memtype.name(), cfg.regions[index].cacheable));
    end
 
    // Check: atomic attributes should be 0
-   if (obi.atop) begin
-      `uvm_error("PMAOBID", $sformatf("OBI D %s address: 0x%08x, region: %0d atop is not zero, OBI: 0x%0x",
-                                       obi.access_type.name(), obi.address, index,
-                                       obi.atop));
+   if (pma_trn.atomic) begin
+      `uvm_error("PMA_trnD", $sformatf("pma_trn D %s address: 0x%08x, region: %0d atomic is not zero, pma_trn: 0x%0x",
+                                       pma_trn.access.name(), pma_trn.address, index,
+                                       pma_trn.atomic));
    end
 
-endfunction : check_obi_d_mapped_region
+endfunction : check_pma_trn_d_mapped_region
 
 `endif // __UVMA_PMA_SB_SV__

@@ -22,4 +22,17 @@ typedef enum {
    UVMA_PMA_RW_READ
 } uvma_pma_rw_enum;
 
+typedef enum {
+   UVM_PMA_DEFAULT,
+   UVMA_PMA_AXI_INTF,
+   UVMA_PMA_OBI_INTF
+} uvma_pma_intf_enum ;
+
+typedef enum {
+   UVMA_PMA_MEM_NC_NB,
+   UVMA_PMA_MEM_NC_B,
+   UVMA_PMA_MEM_C_NB,
+   UVMA_PMA_MEM_C_B
+} uvma_pma_memtype_enum;
+
 `endif // __UVMA_PMA_TDEFS_SV__
