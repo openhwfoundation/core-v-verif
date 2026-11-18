@@ -246,7 +246,12 @@ module  uvma_axi_assert (uvma_axi_intf axi_assert);
             end
          end
          ass_r_id = signed'(axi_assert.psv_axi_cb.r_id);
-         if(axi_assert.psv_axi_cb.r_valid) begin
+         //  An atomic transaction with read data has no AR: its read data comes back on R
+         //  with an ID that no outstanding read uses (AXI E1.1.4). These beats are checked
+         //  by uvma_axi_amo_assert and are not read data here.
+         if(axi_assert.psv_axi_cb.r_valid &&
+            !(axi_assert.axi_amo_assertion_enabled &&
+              (ar_id_tr.size() <= ass_r_id || ar_id_tr[ass_r_id] <= 0))) begin
 
             if(!axi_assert.axi_amo_assertion_enabled) begin
                axi4_errs_rid : assert(ar_len_tr[ass_r_id][0] >= 1) begin   // Check if slave send a read data that follow the address that it relates to (Section A5.2)
