@@ -188,22 +188,22 @@ task uvma_axi_synchronizer_c::add_w_trs(uvma_axi_transaction_c axi_witem);
       size = w_trs_queue[axi_item.m_id].size();
       addr = axi_item.m_addr; // Variable for current address
       Number_Bytes = 2**axi_item.m_size;
-      Aligned_Address = (int'(addr/Number_Bytes) * Number_Bytes);
+      Aligned_Address = (longint'(addr/Number_Bytes) * Number_Bytes);
       aligned = (Aligned_Address == addr); // Check whether addr is aligned to nbytes
       dtsize = Number_Bytes * axi_item.m_len; // Maximum total data transaction size
       if (axi_item.m_burst == 2) begin
-         Lower_Wrap_Boundary = (int'(addr/dtsize) * dtsize);
+         Lower_Wrap_Boundary = (longint'(addr/dtsize) * dtsize);
          // addr must be aligned for a wrapping burst
          Upper_Wrap_Boundary = Lower_Wrap_Boundary + dtsize;
       end
 
       for(int j=0; j < axi_item.m_len+1; j++) begin
 
-         axi_item.lower_byte_lane = addr - (int'(addr/(MAX_ADDR_WIDTH/8))) * (MAX_ADDR_WIDTH/8);
+         axi_item.lower_byte_lane = addr - (longint'(addr/(MAX_ADDR_WIDTH/8))) * (MAX_ADDR_WIDTH/8);
          if (aligned)
             axi_item.upper_byte_lane = axi_item.lower_byte_lane + Number_Bytes - 1;
          else
-            axi_item.upper_byte_lane = Aligned_Address + Number_Bytes - 1 - (int'(addr/(MAX_ADDR_WIDTH/8))) * (MAX_ADDR_WIDTH/8);
+            axi_item.upper_byte_lane = Aligned_Address + Number_Bytes - 1 - (longint'(addr/(MAX_ADDR_WIDTH/8))) * (MAX_ADDR_WIDTH/8);
 
          axi_item.m_addr =  addr - addr%(MAX_ADDR_WIDTH/8);
 
