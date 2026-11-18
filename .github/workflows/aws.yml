@@ -1,0 +1,28 @@
+name: aws
+on: push
+
+# on:
+#   push:
+#     branches:
+#       - 'dev'
+
+jobs:
+  aws:
+    name: AWS Pipeline (private)
+    if: github.actor == 'davideschiavone' || github.actor == 'MikeOpenHWGroup' || github.actor == 'zarubaf'
+    runs-on: ubuntu-latest
+    # These permissions are needed to interact with GitHub's OIDC Token endpoint.
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: eu-west-1
+      - name: Run AWS Pipeline
+        uses: aws-actions/aws-codebuild-run-build@v1
+        with:
+          project-name: core-v-verif
+          hide-cloudwatch-logs: true

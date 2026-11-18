@@ -1,4 +1,4 @@
-# Github CI Regressions
+# GitHub CI Regressions
 The directory **_typically_** contains YAML files that specify the functional regressions for core-v-verif projects.
 We are currently transitioning to a new CI flow and so for now this directory is empty.
 
@@ -86,5 +86,5 @@ on:
 ```
 
 -->
-####end
+#### end
 
