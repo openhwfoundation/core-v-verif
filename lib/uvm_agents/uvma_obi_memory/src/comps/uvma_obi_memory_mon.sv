@@ -257,8 +257,11 @@ task uvma_obi_memory_mon_c::mon_chan_a_trn(output uvma_obi_memory_mon_trn_c trn)
    trn = uvma_obi_memory_mon_trn_c::type_id::create("trn");
 
    while((passive_mp.mon_cb.req !== 1'b1) || (passive_mp.mon_cb.gnt !== 1'b1)) begin
+      // Only count cycles where req is waiting for gnt, not idle cycles
+      if (passive_mp.mon_cb.req === 1'b1) begin
+         trn.gnt_latency++;
+      end
       @(passive_mp.mon_cb);
-      trn.gnt_latency++;
    end
 
    sample_trn_a_from_vif(trn);
