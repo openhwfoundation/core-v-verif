@@ -50,7 +50,6 @@ class uvma_interrupt_cntxt_c extends uvm_object;
 endclass : uvma_interrupt_cntxt_c
 
 
-`pragma protect begin
 
 
 function uvma_interrupt_cntxt_c::new(string name="uvma_interrupt_cntxt");
@@ -69,7 +68,6 @@ function void uvma_interrupt_cntxt_c::reset();
 endfunction : reset
 
 
-`pragma protect end
 
 
 `endif // __UVMA_INTERRUPT_CNTXT_SV__

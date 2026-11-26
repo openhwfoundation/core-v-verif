@@ -89,11 +89,12 @@ endclass
 
 function uvml_logs_reg_logger_cbs_c::new(string name="uvml_logs_reg_logger_cbs");
    
-   uvm_cmdline_processor  cli_proc = uvm_cmdline_processor::get_inst();
-   
+   uvm_cmdline_processor  cli_proc;
+
    super.new(name);
-   
+
    // Retrieve simulation path from CLI argument
+   cli_proc = uvm_cmdline_processor::get_inst();
    void'(cli_proc.get_arg_value({"+", cli_args}, cli_args_result));
    
 endfunction : new
