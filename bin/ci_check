@@ -57,6 +57,7 @@ if (sys.version_info < (3,0,0)):
 # Globals....
 name_of_ci_check_regression = '<core>_ci_check_dev' # must match the name of one regression list in .metrics.json
 core_tests                  = ['misalign', 'illegal', 'dhrystone', 'fibonacci', 'riscv_ebreak_test_0']
+return_code                 = 1 # signal failure by default
 try:
     default_core            = os.environ['CV_CORE']
 except KeyError:
@@ -73,6 +74,7 @@ print('ci_check: topdir  : {}'.format(topdir))
 parser = argparse.ArgumentParser()
 parser.add_argument("-s", "--simulator",     help="SystemVerilog simulator",                          choices=['dsim', 'xrun', 'vsim', 'vcs', 'riviera'])
 parser.add_argument("--core",                help="Set the core to test (default: {})".format(default_core), default=default_core)
+parser.add_argument("-b", "--batch",         help="Run in batch mode (won't prompt for user input)",  action="store_true")
 parser.add_argument("-d", "--debug",         help="Display debug messages",                           action="store_true")
 parser.add_argument("-p", "--print_command", help="Print commands to stdout, do not run",             action="store_true")
 parser.add_argument("-c", "--check_only",    help="Check previosu results (do not run)",              action="store_true")
@@ -120,6 +122,7 @@ def check_uvm_results(check_only=0):
     fail_count = 0
     expct_fail = 0
     pass_count = 0
+    global return_code
 
     if os.path.exists(sim_results_dir):
         fails = subprocess.Popen('grep "SIMULATION FAILED" `find {} -name "*.log" -print`'.format(sim_results_dir),
@@ -153,9 +156,11 @@ def check_uvm_results(check_only=0):
         elif ((fail_count == 0) and (pass_count >=3)):
             print ('\nCI Check PASSED with no failures.')
             print ('OK to issue a pull-request.\n')
+            return_code = 0
         elif (fail_count == expct_fail):
             print ('\nCI Check PASSED with KNOWN failure(s).')
             print ('OK to issue a pull-request.\n')
+            return_code = 0
         else:
             print ('\nCI Check FAILED with unknown failures.')
             print ('Please fix before issuing a pull-request.\n')
@@ -163,6 +168,7 @@ def check_uvm_results(check_only=0):
         print ('\nCI Check FAILED with non-existent sim directory: {}'.format(sim_results_dir))
         print ('Please fix before issuing a pull-request.\n')
 
+    exit(return_code)
 
 def check_core_results(run_count):
     core_runs = subprocess.Popen('grep "EXIT SUCCESS" -R -I ../{}/sim/core/simulation_results'.format(args.core.lower()),
@@ -187,9 +193,10 @@ def check_core_results(run_count):
 
 # This script may do some unexpected things, so give the user an escape hatch.
 def ask_user():
-    txt = input("Is this what you want [Y/N]? ")
-    if not ((txt == 'Y') or (txt == 'y')):
-        exit(1)
+    if (not args.batch):
+        txt = input("Is this what you want [Y/N]? ")
+        if not ((txt == 'Y') or (txt == 'y')):
+            exit(1)
 
 # Load regression YAML
 def load_regress_yaml(regression):
@@ -233,7 +240,7 @@ if (args.check_only):
         check_core_results(len(core_tests)+1) # +1 because 'make' runs hello-world
     if not (args.no_uvm):
         check_uvm_results(args.check_only)
-    exit(0)
+    exit(return_code)
 
 if (args.no_uvm):
     uvm = 0
@@ -242,10 +249,10 @@ if (args.verilator):
     veril = 1
 elif (args.simulator == None):
     print ('Must specify a simulator.  Type `ci_check -h` to see how')
-    exit(0)
+    exit(1)
 elif (not(shutil.which(args.simulator))):
     print ('ERROR: simulator='+args.simulator+' but executable not found')
-    exit(0)
+    exit(1)
 else:
     svtool = args.simulator
 
@@ -254,16 +261,16 @@ print('ci_check: core : {}'.format(args.core))
 print('ci_check: name_of_ci_check_regression : {}'.format(name_of_ci_check_regression))
 os.environ['CV_CORE'] = args.core.upper()
 
-# --print_command is set: do not actually _do_ anything
+# if --print_command is set: do not actually _do_ anything
 if not (prcmd):
     if (args.keep):
         print ('Keeping previously cloned version of the RTL plus any previously generated files')
         ask_user()
     else:
-        print ('This will delete your previously cloned RTL repo plus all previously generated files')
+        print ('Deleting your previously cloned RTL repo plus all previously generated files')
         ask_user()
         os.chdir(os.path.abspath(os.path.join(topdir, args.core.lower(), 'sim/uvmt')))
-        os.system('make clean_all')
+        os.system('make clean_all SIMULATOR={}'.format(args.simulator))
         os.chdir(os.path.join(topdir, '{}/sim/core'.format(args.core.lower())))
         os.system('make clean_all')
         os.chdir(os.path.join(topdir, 'bin'))
@@ -319,7 +326,7 @@ if (uvm):
                         os.chdir(topdir)      # cmd in .metrics.json assumes all cmds start from here
                 else:
                     print ('ERROR: cannot find build command in .metrics.json')
-                    exit(0)
+                    exit(1)
 
     # Get the simulation command(s)
     for key in metrics_dict:

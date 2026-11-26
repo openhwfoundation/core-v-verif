@@ -1,0 +1,37 @@
+# Copyright 2023, OpenHW Group
+# SPDX-License-Identifier:Apache-2.0 WITH SHL-2.0
+#
+# Build-specification for the aws.yml workflow.
+
+version: 0.2
+
+phases:
+
+  build:
+    commands:
+      - chown -R florian:florian .
+#      - su florian -c "source /synopsys/scripts/env.sh; echo $PATH"
+# VCS environment
+      - yum -y install gcc gcc-c++ make
+      - export VCS_HOME=/synopsys/vcs/S-2021.09-SP1
+      - export PATH=$VCS_HOME/bin:$PATH
+      - vcs -id
+#      - export LM_LICENSE_FILE=29000@ip-172-31-46-244
+      - export SNPSLMD_LICENSE_FILE=27020@ip-172-31-46-244.eu-west-1.compute.internal
+# Questasim (vsim) environment
+#      - export QUESTAROOT=/onespin/questasim
+#      - export LM_LICENSE_FILE=29000@ip-172-31-46-244
+#      - export PATH=${QUESTAROOT}/bin:${PATH}
+#      - export MTI_VCO_MODE=64
+#      - wget https://buildbot.embecosm.com/job/corev-gcc-centos7/19/artifact/corev-openhw-gcc-centos7-20230905.tar.gz
+      - curl -O https://buildbot.embecosm.com/job/corev-gcc-centos7/19/artifact/corev-openhw-gcc-centos7-20230905.tar.gz
+      - tar xf corev-openhw-gcc-centos7-20230905.tar.gz
+      - export HERE=`pwd`
+      - export CV_SW_TOOLCHAIN=$HERE/corev-openhw-gcc-centos7-20230905
+      - export CV_SW_PREFIX=riscv32-corev-elf-
+      - export CV_SW_MARCH=rv32imc_zicsr_zifencei
+      - corev-openhw-gcc-centos7-20230905/bin/riscv32-corev-elf-gcc --version
+#      - cd cv32e40p/sim/uvmt
+#      - make test USE_ISS=0 SIMULATOR=vcs TEST=hello-world
+      - cd bin
+      - ./ci_check --batch --iss 0 --simulator vcs --core cv32e40p
