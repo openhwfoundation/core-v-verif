@@ -36,6 +36,7 @@ parser.add_argument('--stdout'   , dest='stdout', type=int, help='1: stdout 0: n
 parser.add_argument('--outdir'   , dest='outdir', type=str, help='output dirctory default "output"')
 parser.add_argument('--verbose'  , dest='verbose', action='store_true', help='print info messages, default False')
 parser.add_argument('--run_time' , dest='run_time', type=str, help='simulation run time ex: 100ns, default -all')
+parser.add_argument('--sim_opt', type=str, default='', help='Additional QuestaSim runtime options')
 
 args = parser.parse_args()
 verbose = args.verbose
@@ -134,6 +135,8 @@ if option_ok == 1:
       else:
          sim_opt = ""
 
+      if args.sim_opt:
+        sim_opt += " " + args.sim_opt
       #Branch the simulation depending on the tool
       if entry['tool'] == "questa":
          #directory that stores dbg files
