@@ -1,22 +1,19 @@
 // ----------------------------------------------------------------------------
-// Copyright 2023 CEA*
-// *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
+//Copyright 2023 CEA*
+//*Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
 //
-// SPDX-License-Identifier: Apache-2.0
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+//Licensed under the Apache License, Version 2.0 (the "License");
+//you may not use this file except in compliance with the License.
+//You may obtain a copy of the License at
 //
 //    http://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+//Unless required by applicable law or agreed to in writing, software
+//distributed under the License is distributed on an "AS IS" BASIS,
+//WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//See the License for the specific language governing permissions and
+//limitations under the License.
 //[END OF HEADER]
-// ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 //  Description : Driver AXI superset requests or responses
@@ -56,7 +53,6 @@ class axi_superset_driver_c extends uvm_driver # ( axi_superset_txn_c );
     protected axi_dv_ver_t         axi_version      ;
     protected bit                  is_master_side   ;
     protected axi_dv_driver_idle_t drive_idle_value ;
-    protected bit                  is_reactive      ;
 
     event reset_asserted ;
     event reset_deasserted ;
@@ -86,11 +82,6 @@ class axi_superset_driver_c extends uvm_driver # ( axi_superset_txn_c );
     // sending back the corresponding response
     axi_superset_txn_c   global_txn_queue[string][$] ;
 
-    // Queue for storing the write request AW/W packets to combine them, and
-    // send back a response for reactive slave.
-    axi_superset_txn_c   write_req_queue[$];
-    axi_superset_txn_c   write_dat_queue[$];
-
     // -----------------------------------------------------------------------
     // Constructor
     // -----------------------------------------------------------------------
@@ -112,7 +103,6 @@ class axi_superset_driver_c extends uvm_driver # ( axi_superset_txn_c );
         axi_version      = m_agent_config.get_axi_version( );
         is_master_side   = m_agent_config.get_is_master_side( );
         drive_idle_value = m_agent_config.get_driver_idle_value_cfg( );
-        is_reactive      = m_agent_config.get_is_reactive( );
 
         // Getting the axi_superset interface from uvm_config_db
         `uvm_info(this.name, $sformatf("Interface Name %0s", interface_name ), UVM_DEBUG)
@@ -163,8 +153,6 @@ class axi_superset_driver_c extends uvm_driver # ( axi_superset_txn_c );
         end
 
         global_txn_queue.delete();
-        write_req_queue.delete();
-        write_dat_queue.delete();
 
         `uvm_info(this.name, "Reset stage complete.", UVM_DEBUG)
     endtask
@@ -198,13 +186,7 @@ class axi_superset_driver_c extends uvm_driver # ( axi_superset_txn_c );
          // drive_R_channel    : Task in charge of driving transactions on the R
          //                      channel.
          //
-         // receive_AW_channel : Task in charge of receiving transactions on the AW
-         //                      channel.
-         // receive_W_channel  : Task in charge of receiving transactions on the W
-         //                      channel.
          // receive_B_channel  : Task in charge of receiving transactions on the B
-         //                      channel.
-         // receive_AR_channel : Task in charge of receiving transactions on the AR
          //                      channel.
          // receive_R_channel  : Task in charge of receiving transactions on the R
          //                      channel.
@@ -227,12 +209,8 @@ class axi_superset_driver_c extends uvm_driver # ( axi_superset_txn_c );
               join_none
             end else begin
               fork // Slave tasks
-                receive_AW_channel();
-                receive_W_channel();
                 drive_B_channel();
-                receive_AR_channel();
                 drive_R_channel();
-                send_back_write_response();
               join_none
             end
             @(reset_asserted);
@@ -260,17 +238,21 @@ class axi_superset_driver_c extends uvm_driver # ( axi_superset_txn_c );
           if ( !$cast( txn_channel, txn.clone() ) )
             `uvm_error(this.name,"Error during the cast of the transaction");
 
-          // In case of an Atomic Store, only a write response is expected. The other
-          // atomic transactions expect a read response as well
-          if ( ( txn_channel.m_atop[5]) && ( txn_channel.m_txn_type == AXI_WRITE_REQ ) ) begin
-            ids_s = $sformatf("AXI_READ_REQ_%0h", txn.m_id);
+          // Registering the request in a global queue on master side, since
+          // they will be necessary to send back the response the sequence
+          if ( is_master_side ) begin
+            // In case of an Atomic Store, only a write response is expected. The other
+            // atomic transactions expect a read response as well
+            if ( ( txn_channel.m_atop[5]) && ( txn_channel.m_txn_type == AXI_WRITE_REQ ) ) begin
+              ids_s = $sformatf("AXI_READ_REQ_%0h", txn.m_id);
+              global_txn_queue[ids_s].push_front(txn);
+            end
+
+            ids_s = $sformatf("%0s_%0h", txn.m_txn_type, txn.m_id);
+            // Storing the transaction in an associate array of queue to use it
+            // when its time to send back the corresponding response to the sequence
             global_txn_queue[ids_s].push_front(txn);
           end
-
-          ids_s = $sformatf("%0s_%0h", txn.m_txn_type, txn.m_id);
-          // Storing the transaction in an associate array of queue to use it
-          // when its time to send back the corresponding response to the sequence
-          global_txn_queue[ids_s].push_front(txn);
 
           `uvm_info(this.name,
              $sformatf("%0s", txn.convert2string()),
@@ -535,134 +517,6 @@ class axi_superset_driver_c extends uvm_driver # ( axi_superset_txn_c );
     // ----------------------------------------------------------------------------
 
     // ----------------------------------------------------------------------------
-    // Receive AW channel ( Slave tasks )
-    // Task in charge of receiving the response on the AW channel by managing
-    // the AW_ready signal.
-    // If the Slave is reactive, 
-    // ----------------------------------------------------------------------------
-    task receive_AW_channel();
-      axi_superset_txn_c wreq;
-      axi_superset_txn_c rreq;
-
-      `uvm_info(this.name, "receive_AW_channel task is starting", UVM_DEBUG)
-
-      forever begin
-        @(posedge axi_superset_vif.clk_i);
-
-        if ( axi_superset_vif.aw_valid && axi_superset_vif.aw_ready ) begin
-
-          // If the agent is reactive, the id of the transaction is stored and
-          // push in a queue, to generate a response when the write request is
-          // completed.
-          if ( is_reactive ) begin
-            // Storing the id in a transaction
-            wreq = new();
-            wreq.m_txn_config = m_agent_config.get_txn_config( );
-            wreq.m_id         = axi_superset_vif.aw_id      ;
-            wreq.m_idunq      = axi_superset_vif.aw_idunq   ;
-
-            // Push the transaction in a write request queue, to combine it
-            // later with the packets from the W channel
-            write_req_queue.push_front( wreq );
-
-            // Push the read transaction in the read request queue, if the
-            // atop field indicates the need of an additional read response
-            if ( axi_superset_vif.aw_atop[5] ) begin
-              rreq = new();
-              rreq.m_txn_config = m_agent_config.get_txn_config( );
-              if (!rreq.randomize() with
-              { m_txn_type           == AXI_READ_RSP            ;
-                m_axi_version        == m_axi_version           ;
-                m_id                 == axi_superset_vif.aw_id  ;
-                m_len                == axi_superset_vif.aw_len ;
-                m_delay_cycle_chan_X == 0                       ;
-                foreach (m_delay_cycle_flits[i]) m_delay_cycle_flits[i] == 0 ;
-              } ) `uvm_error(this.name,"Error randomizing the request metadata");
-              r_txn_queue.push_front( rreq );
-            end
-          end
- 
-        end // if
-
-      end // forever
-
-    endtask // receive_AW_channel
-
-    // ----------------------------------------------------------------------------
-    // Receive W channel ( Slave task )
-    // Task in charge of receiving the response on the W channel by managing
-    // the W_ready signal
-    // ----------------------------------------------------------------------------
-    task receive_W_channel();
-      axi_superset_txn_c wdat;
-
-      `uvm_info(this.name, "receive_W_channel task is starting", UVM_DEBUG)
-
-      forever begin
-        @(posedge axi_superset_vif.clk_i);
-
-        if ( axi_superset_vif.w_valid && axi_superset_vif.w_ready ) begin
-
-          // If the slave is reactive, wait for the last packet to store
-          // the request in the queue to combine it with the write request from
-          // the AW channel
-          if ( ( is_reactive ) && ( axi_superset_vif.w_last ) ) begin
-            `uvm_info(this.name, "Sending a new wdat packet", UVM_DEBUG)
-            wdat = new();
-            wdat.m_txn_config = m_agent_config.get_txn_config( );
-            write_dat_queue.push_front(wdat);
-          end
-
-        end // if
-      end // forever
-
-    endtask // receive_W_channel
-
-    // ----------------------------------------------------------------------------
-    // send_back_write_response ( Slave task )
-    // Task in charge of randomizing a corresponding response to a write
-    // request, before sending it back to the master via the drive_B_channel
-    // task.
-    // ----------------------------------------------------------------------------
-    task send_back_write_response();
-      axi_superset_txn_c  wtxn;
-      axi_superset_txn_c  wreq;
-      axi_superset_txn_c  wdat;
-
-      `uvm_info(this.name, "send_back_write_response task is starting", UVM_DEBUG)
-
-      forever begin
-        // Wait for the write transaction to be completed on both AW and
-        // W channel before generating the response.
-        wait( write_req_queue.size() != 0 );
-        wait( write_dat_queue.size() != 0 );
-
-        wreq = write_req_queue.pop_back();
-        wdat = write_dat_queue.pop_back();
-
-        // Generating the corresponding random response
-        wtxn = new();
-        wtxn.m_txn_config = m_agent_config.get_txn_config( );
-
-        `uvm_info(this.name, $sformatf("Generating new rsp TXN_ID=%0h(h)", wreq.m_id), UVM_DEBUG)
-        if (!wtxn.randomize() with 
-          { m_txn_type           == AXI_WRITE_RSP ;
-            m_axi_version        == m_axi_version ;
-            m_id                 == wreq.m_id     ;
-            m_idunq              == wreq.m_idunq  ;
-            m_delay_cycle_chan_X == 0             ;
-          } )
-          `uvm_error(this.name,"Error randomizing the request metadata");
-
-        // Sending the response to the drive_B_channel task to drive the
-        // response back to the master
-        b_txn_queue.push_front( wtxn );
-
-      end // forever
-
-    endtask : send_back_write_response
-
-    // ----------------------------------------------------------------------------
     // Receive B channel ( Master tasks ) 
     // Task in charge of receiving the response on the B channel by managing
     // the b_ready signal
@@ -713,46 +567,6 @@ class axi_superset_driver_c extends uvm_driver # ( axi_superset_txn_c );
       end // forever
 
     endtask // receive_B_channel
-
-    // ----------------------------------------------------------------------------
-    // Receive AR channel ( Slave task )
-    // Task in charge of receiving the response on the AR channel by managing
-    // the ar_ready signal
-    // ----------------------------------------------------------------------------
-    task receive_AR_channel();
-      axi_superset_txn_c rreq;
-
-      `uvm_info(this.name, "receive_AR_channel task is starting", UVM_DEBUG)
-
-      forever begin
-        @(posedge axi_superset_vif.clk_i);
-
-        if ( axi_superset_vif.ar_valid && axi_superset_vif.ar_ready ) begin
-
-          // Getting the ids of the transaction
-          rreq = new();
-          rreq.m_txn_config = m_agent_config.get_txn_config( );
-
-          if ( is_reactive ) begin
-            if (!rreq.randomize() with 
-              { m_txn_type           == AXI_READ_RSP            ;
-                m_axi_version        == m_axi_version           ;
-                m_id                 == axi_superset_vif.ar_id  ;
-                m_len                == axi_superset_vif.ar_len ;
-                m_idunq              == axi_superset_vif.ar_idunq  ;
-                m_delay_cycle_chan_X == 0                       ;
-                foreach (m_delay_cycle_flits[i]) m_delay_cycle_flits[i] == 0 ;
-              } )
-              `uvm_error(this.name,"Error randomizing the request metadata");
-
-            // Sending the response to the drive_R_channel task to drive the
-            // response back to the master
-            r_txn_queue.push_front( rreq );
-          end
-        end // if
-      end // forever
-
-    endtask // receive_AR_channel
 
     // ----------------------------------------------------------------------------
     // Receive R channel ( Master task ) 

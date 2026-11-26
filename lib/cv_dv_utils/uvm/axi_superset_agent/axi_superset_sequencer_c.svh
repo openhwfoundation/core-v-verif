@@ -1,22 +1,19 @@
 // ----------------------------------------------------------------------------
-// Copyright 2023 CEA*
-// *Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
+//Copyright 2023 CEA*
+//*Commissariat a l'Energie Atomique et aux Energies Alternatives (CEA)
 //
-// SPDX-License-Identifier: Apache-2.0
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+//Licensed under the Apache License, Version 2.0 (the "License");
+//you may not use this file except in compliance with the License.
+//You may obtain a copy of the License at
 //
 //    http://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+//Unless required by applicable law or agreed to in writing, software
+//distributed under the License is distributed on an "AS IS" BASIS,
+//WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//See the License for the specific language governing permissions and
+//limitations under the License.
 //[END OF HEADER]
-// ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 //  Description : This file defines the AXI superset sequencer module
@@ -59,6 +56,11 @@ class axi_superset_sequencer_c extends uvm_sequencer #( axi_superset_txn_c );
     // Flag to indicate if the maximum number of ID available are used
     protected bit flag_write_id_full;
     protected bit flag_read_id_full;
+
+    // -----------------------------------------------------------------------
+    // Analysis Ports
+    // -----------------------------------------------------------------------
+    uvm_tlm_analysis_fifo #(axi_superset_txn_c) m_mon2seq_export;
 
     // -------------------------------------------------------------------------
     // Function: is_id_queue_full
@@ -285,8 +287,25 @@ class axi_superset_sequencer_c extends uvm_sequencer #( axi_superset_txn_c );
         flag_read_id_full  = 0;
       endfunction: new
 
+    // -----------------------------------------------------------------------
+    // Build Phase
+    // -----------------------------------------------------------------------
+    function void build_phase(uvm_phase phase);
+
+        super.build_phase(phase);
+
+        // Initialisation of the uvm_tlm_analysis_fifo for axi_superset interface
+        m_mon2seq_export = new("m_mon2seq_export" , this) ;
+
+    endfunction: build_phase
+
+    // -----------------------------------------------------------------------
+    // Rest Phase
+    // -----------------------------------------------------------------------
     virtual task reset_phase (uvm_phase phase);
       super.reset_phase(phase);
+
+      m_mon2seq_export.flush();
 
       write_ids_queue.delete();
       read_ids_queue.delete();
