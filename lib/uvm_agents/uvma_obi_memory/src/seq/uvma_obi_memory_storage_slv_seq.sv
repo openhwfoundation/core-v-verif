@@ -102,6 +102,7 @@ task uvma_obi_memory_storage_slv_seq_c::do_response(ref uvma_obi_memory_mon_trn_
             //   }
             //})
             `uvm_create(_req)
+            add_r_fields(mon_req, _req); 	     
             //if (_req.randomize()) begin
                _req.access_type    = UVMA_OBI_MEMORY_ACCESS_READ;
                _req.err            = error;
@@ -129,6 +130,7 @@ task uvma_obi_memory_storage_slv_seq_c::do_response(ref uvma_obi_memory_mon_trn_
             //   }
             //})
             `uvm_create(_req)
+            add_r_fields(mon_req, _req); 	     
             //if (_req.randomize()) begin
                _req.access_type    = UVMA_OBI_MEMORY_ACCESS_READ;
                _req.err            = error;
@@ -162,6 +164,7 @@ task uvma_obi_memory_storage_slv_seq_c::do_response(ref uvma_obi_memory_mon_trn_
          //   _req.tail_length    == 1;
          //})
          `uvm_create(_req)
+         add_r_fields(mon_req, _req);
          _req.access_type    = UVMA_OBI_MEMORY_ACCESS_WRITE;
          _req.err            = error;
          //_req.gnt_latency    = 1;         
