@@ -51,6 +51,8 @@ class uvma_obi_memory_cntxt_c extends uvm_object;
    // Events
    uvm_event  sample_cfg_e;
    uvm_event  sample_cntxt_e;
+   uvm_event  reset_asserted_ev;   
+   uvm_event  reset_deasserted_ev;  
    
    
    `uvm_object_utils_begin(uvma_obi_memory_cntxt_c)
@@ -61,6 +63,8 @@ class uvma_obi_memory_cntxt_c extends uvm_object;
       
       `uvm_field_event(sample_cfg_e  , UVM_DEFAULT)
       `uvm_field_event(sample_cntxt_e, UVM_DEFAULT)
+      `uvm_field_event(reset_asserted_ev    , UVM_DEFAULT)
+      `uvm_field_event(reset_deasserted_ev  , UVM_DEFAULT)
    `uvm_object_utils_end
    
    
@@ -81,8 +85,10 @@ function uvma_obi_memory_cntxt_c::new(string name="uvma_obi_memory_cntxt");
    
    super.new(name);
    
-   sample_cfg_e   = new("sample_cfg_e"  );
-   sample_cntxt_e = new("sample_cntxt_e");
+   sample_cfg_e         = new("sample_cfg_e"  );
+   sample_cntxt_e       = new("sample_cntxt_e");
+   reset_asserted_ev    = new("reset_asserted_ev"    );
+   reset_deasserted_ev  = new("reset_deasserted_ev"  );
    
 endfunction : new
 
