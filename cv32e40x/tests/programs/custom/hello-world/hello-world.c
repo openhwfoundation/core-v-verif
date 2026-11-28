@@ -27,7 +27,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define EXP_MISA 0x40001104
+#define EXP_MISA_LEGACY 0x40001104
+#define EXP_MISA_LOCAL  0x40801104
 
 int main(int argc, char *argv[])
 {
@@ -49,8 +50,9 @@ int main(int argc, char *argv[])
     }
 
     /* Check MISA CSR: if its zero, it might not be implemented at all */
-    if (misa_rval != EXP_MISA) {
-      printf("\tERROR: CSR MISA reads as 0x%x - should be 0x%x for this release of CV32E40X!\n\n", misa_rval, EXP_MISA);
+    if ((misa_rval != EXP_MISA_LEGACY) && (misa_rval != EXP_MISA_LOCAL)) {
+      printf("\tERROR: CSR MISA reads as 0x%x - should be 0x%x or 0x%x for this CV32E40X setup!\n\n",
+             misa_rval, EXP_MISA_LEGACY, EXP_MISA_LOCAL);
       return EXIT_FAILURE;
     }
 
