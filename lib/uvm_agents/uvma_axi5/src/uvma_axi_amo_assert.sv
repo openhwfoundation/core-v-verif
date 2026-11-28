@@ -180,7 +180,10 @@ module  uvma_axi_amo_assert (uvma_axi_intf axi_assert);
          end
          ass_r_id = signed'(axi_assert.r_id);
          if(axi_assert.r_valid && axi_assert.r_ready) begin
-            axi4_errs_amo_rid : assert(ar_len_tr[ass_r_id][0] >= 1) begin   // Check if slave send a read data that follow the address that it relates to (Section A5.2)
+            //  A read data beat belongs to an outstanding read of its ID (A5.2), otherwise to
+            //  an outstanding atomic transaction of that ID (E1.1.4), otherwise it is an error.
+            if(ass_r_id < ar_len_tr.size() && ar_len_tr[ass_r_id].size() > 0 &&
+               ar_len_tr[ass_r_id][0] >= 1) begin
                ar_len_tr[ass_r_id][0] = ar_len_tr[ass_r_id][0] - 1;
                cov_errs_rid_property++;
             end else begin
