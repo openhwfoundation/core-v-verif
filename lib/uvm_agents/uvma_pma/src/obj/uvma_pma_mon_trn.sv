@@ -34,6 +34,12 @@ class uvma_pma_mon_trn_c#(int ILEN=DEFAULT_ILEN,
    // Access type (instruction or data)
    uvma_pma_access_enum access;
 
+   // Read/Write Address
+   longint address;
+
+   //Atomic attributes of transaction
+   bit atomic;
+
    // Set if the first word of the PMA region (for fucntional coverage)
    bit is_first_word;
 
@@ -43,11 +49,17 @@ class uvma_pma_mon_trn_c#(int ILEN=DEFAULT_ILEN,
    // Read or write
    uvma_pma_rw_enum rw;
 
+   // Bufferable and cacheable attributes of transactions
+   uvma_pma_memtype_enum memtype;
+
    `uvm_object_param_utils_begin(uvma_pma_mon_trn_c#(ILEN,XLEN))
       `uvm_field_int(                       region_index,  UVM_DEFAULT)
       `uvm_field_int(                       is_default,    UVM_DEFAULT)
+      `uvm_field_int(                       address,       UVM_DEFAULT)
+      `uvm_field_int(                       atomic,        UVM_DEFAULT)
       `uvm_field_enum(uvma_pma_access_enum, access,        UVM_DEFAULT)
       `uvm_field_enum(uvma_pma_rw_enum,     rw,            UVM_DEFAULT)
+      `uvm_field_enum(uvma_pma_memtype_enum,memtype,       UVM_DEFAULT)
       `uvm_field_int(                       is_first_word, UVM_DEFAULT)
       `uvm_field_int(                       is_last_word,  UVM_DEFAULT)
    `uvm_object_utils_end

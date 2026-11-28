@@ -30,11 +30,12 @@ package uvma_pma_pkg;
    import uvml_logs_pkg      ::*;
    import uvma_core_cntrl_pkg::*;
    import uvma_obi_memory_pkg::*;
+   import uvma_axi_pkg::*;
    import uvma_rvfi_pkg      ::*;
 
    `uvm_analysis_imp_decl(_rvfi_instr)
-   `uvm_analysis_imp_decl(_obi_i)
-   `uvm_analysis_imp_decl(_obi_d)
+   `uvm_analysis_imp_decl(_bus_i)
+   `uvm_analysis_imp_decl(_bus_d)
 
    // Constants / Structs / Enums
    `include "uvma_pma_constants.sv"
@@ -52,7 +53,8 @@ package uvma_pma_pkg;
    `include "uvma_pma_cov_model.sv"
    `include "uvma_pma_region_cov_model.sv"
    `include "uvma_pma_sb.sv"
-   `include "uvma_pma_mon.sv"
+   `include "uvma_pma_obi_mon.sv"
+   `include "uvma_pma_axi_mon.sv"
    `include "uvma_pma_agent.sv"
 
 endpackage : uvma_pma_pkg

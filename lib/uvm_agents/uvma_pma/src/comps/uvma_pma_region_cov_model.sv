@@ -13,9 +13,9 @@
 `define __UVMA_PMA_REGION_COV_MODEL_SV__
 
 covergroup cg_pma_access(
-   string name
-) with function sample(uvma_pma_mon_trn_c           trn,
-                       uvma_core_cntrl_pma_region_c pma_region);
+   string name , bit is_main ,  bit support_atomic ,  bit support_cacheable ,  bit support_buff )
+with function sample(uvma_pma_mon_trn_c           trn
+                   );
    option.name = name;
    `per_instance_fcov
 
@@ -27,24 +27,28 @@ covergroup cg_pma_access(
       bins LAST = {1};
    }
 
-   cp_main: coverpoint (pma_region.main) {
+   cp_main: coverpoint (is_main) {
       bins IO   = {0};
       bins MAIN = {1};
+      ignore_bins IGN = {!is_main} ;
    }
 
-   cp_bufferable: coverpoint (pma_region.bufferable) {
+   cp_bufferable: coverpoint (support_buff) {
       bins NONBUF = {0};
       bins BUF    = {1};
+      ignore_bins IGN = {!support_buff} ;
    }
 
-   cp_cacheable: coverpoint (pma_region.cacheable) {
+   cp_cacheable: coverpoint (support_cacheable) {
       bins NONCACHE = {0};
       bins CACHE    = {1};
+      ignore_bins IGN = {!support_cacheable} ;
    }
 
-   cp_atomic: coverpoint (pma_region.atomic) {
+   cp_atomic: coverpoint (support_atomic) {
       bins NONATOMIC = {0};
       bins ATOMIC    = {1};
+      ignore_bins IGN = {!support_atomic} ;
    }
 
    cp_access: coverpoint(trn.access) {
@@ -75,6 +79,8 @@ class uvma_pma_region_cov_model_c extends uvm_component;
    uvma_pma_cfg_c       cfg;
    uvma_pma_mon_trn_c   mon_trn;
 
+   bit ignore_atomic;
+   bit ignore_buff;
    // TLM
    uvm_tlm_analysis_fifo#(uvma_pma_mon_trn_c)  mon_trn_fifo;
 
@@ -131,7 +137,7 @@ function void uvma_pma_region_cov_model_c::build_phase(uvm_phase phase);
 
    if (cfg.trn_log_enabled && cfg.cov_model_enabled) begin
       if (cfg.regions.size()) begin
-         pma_access_covg = new("pma_access_covg");
+         pma_access_covg = new( $sformatf("pma_access_covg_%0d", region_index),  cfg.regions[region_index].main , cfg.regions[region_index].atomic , cfg.regions[region_index].cacheable , cfg.regions[region_index].bufferable  );
       end
    end
 
@@ -161,8 +167,9 @@ endtask : run_phase
 function void uvma_pma_region_cov_model_c::sample_mon_trn();
 
    if (!mon_trn.is_default && mon_trn.region_index == this.region_index) begin
-      pma_access_covg.sample(mon_trn, cfg.regions[mon_trn.region_index]);
+      pma_access_covg.sample(mon_trn);
    end
+
 
 endfunction : sample_mon_trn
 
