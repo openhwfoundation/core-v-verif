@@ -53,6 +53,8 @@ class uvma_obi_memory_sqr_c extends uvm_sequencer#(
     * Ensures cfg & cntxt handles are not null
     */
    extern virtual function void build_phase(uvm_phase phase);
+
+   extern virtual task run_phase(uvm_phase phase);
    
 endclass : uvma_obi_memory_sqr_c
 
@@ -82,5 +84,14 @@ function void uvma_obi_memory_sqr_c::build_phase(uvm_phase phase);
    
 endfunction : build_phase
 
+task uvma_obi_memory_sqr_c::run_phase(uvm_phase phase);
+    super.run_phase(phase);
+
+    forever begin
+        @(cntxt.reset_state == UVMA_OBI_MEMORY_RESET_STATE_IN_RESET);
+        mon_trn_fifo.flush();
+    end
+
+endtask
 
 `endif // __UVMA_OBI_MEMORY_SQR_SV__
